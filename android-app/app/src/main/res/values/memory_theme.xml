@@ -1,0 +1,108 @@
+<resources>
+    <color name="memory_selection_light">#8A593F</color>
+    <color name="memory_selection_green">#39654D</color>
+    <color name="memory_selection_blue">#466687</color>
+    <color name="memory_selection_dark">#39332D</color>
+    <style name="MemoryLightOverlay">
+        <item name="toolbarStyle">@style/MemoryToolbar</item>
+        <item name="actionModeStyle">@style/MemoryLightActionMode</item>
+        <item name="alertDialogTheme">@style/MemoryLightDialog</item>
+        <item name="materialAlertDialogTheme">@style/MemoryLightDialog</item>
+        <item name="android:datePickerDialogTheme">@style/MemoryLightDate</item>
+        <item name="android:colorAccent">#8A593F</item>
+        <item name="colorAccent">#8A593F</item>
+        <item name="colorControlActivated">#8A593F</item>
+    </style>
+    <style name="MemoryDarkOverlay">
+        <item name="toolbarStyle">@style/MemoryToolbar</item>
+        <item name="actionModeStyle">@style/MemoryDarkActionMode</item>
+        <item name="alertDialogTheme">@style/MemoryDarkDialog</item>
+        <item name="materialAlertDialogTheme">@style/MemoryDarkDialog</item>
+        <item name="android:datePickerDialogTheme">@style/MemoryDarkDate</item>
+        <item name="colorControlActivated">#D9AD8C</item>
+    </style>
+    <style name="MemoryGreenOverlay" parent="MemoryLightOverlay">
+        <item name="actionModeStyle">@style/MemoryGreenActionMode</item>
+        <item name="alertDialogTheme">@style/MemoryGreenDialog</item>
+        <item name="materialAlertDialogTheme">@style/MemoryGreenDialog</item>
+        <item name="colorControlActivated">#39654D</item>
+    </style>
+    <style name="MemoryBlueOverlay" parent="MemoryLightOverlay">
+        <item name="actionModeStyle">@style/MemoryBlueActionMode</item>
+        <item name="alertDialogTheme">@style/MemoryBlueDialog</item>
+        <item name="materialAlertDialogTheme">@style/MemoryBlueDialog</item>
+        <item name="colorControlActivated">#466687</item>
+    </style>
+    <style name="MemoryGreenDialog" parent="MemoryLightDialog">
+        <item name="android:colorBackground">#F2F6F0</item>
+        <item name="colorPrimary">#39654D</item>
+        <item name="colorSecondary">#39654D</item>
+        <item name="android:textColorPrimary">#243B30</item>
+        <item name="colorOnSurface">#243B30</item>
+        <item name="colorSurface">#F2F6F0</item>
+    </style>
+    <style name="MemoryBlueDialog" parent="MemoryLightDialog">
+        <item name="android:colorBackground">#F2F5F9</item>
+        <item name="colorPrimary">#466687</item>
+        <item name="colorSecondary">#466687</item>
+        <item name="android:textColorPrimary">#26374D</item>
+        <item name="colorOnSurface">#26374D</item>
+        <item name="colorSurface">#F2F5F9</item>
+    </style>
+    <style name="MemoryLightDialog" parent="Theme.MaterialComponents.Light.Dialog.Alert">
+        <item name="android:colorBackground">#F8F5EF</item>
+        <item name="colorPrimary">#8A593F</item>
+        <item name="colorSecondary">#8A593F</item>
+        <item name="android:textColorPrimary">#342E29</item>
+        <item name="colorOnSurface">#342E29</item>
+        <item name="colorSurface">#F8F5EF</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/MemoryDialogTitle</item>
+        <item name="shapeAppearanceMediumComponent">@style/MemoryDialogShape</item>
+    </style>
+    <style name="MemoryDarkDialog" parent="Theme.MaterialComponents.Dialog.Alert">
+        <item name="android:colorBackground">#292622</item>
+        <item name="colorPrimary">#D9AD8C</item>
+        <item name="colorSecondary">#D9AD8C</item>
+        <item name="android:textColorPrimary">#F3ECE3</item>
+        <item name="colorOnSurface">#F3ECE3</item>
+        <item name="colorSurface">#292622</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/MemoryDialogTitle</item>
+        <item name="shapeAppearanceMediumComponent">@style/MemoryDialogShape</item>
+    </style>
+    <style name="MemoryLightDate" parent="android:style/Theme.Material.Light.Dialog.Alert"><item name="android:colorAccent">#8A593F</item></style>
+    <style name="MemoryDarkDate" parent="android:style/Theme.Material.Dialog.Alert"><item name="android:colorAccent">#D9AD8C</item></style>
+    <style name="MemoryLightPopup" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:colorBackground">#F8F5EF</item>
+        <item name="android:textColorPrimary">#342E29</item>
+    </style>
+    <style name="MemoryDarkPopup" parent="ThemeOverlay.AppCompat.Dark">
+        <item name="android:colorBackground">#292622</item>
+        <item name="android:textColorPrimary">#F3ECE3</item>
+    </style>
+    <style name="MemoryToolbar" parent="Widget.AppCompat.Toolbar">
+        <item name="titleTextAppearance">@style/MemoryToolbarTitle</item>
+    </style>
+    <style name="MemoryDialogTitle" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="MemoryDialogShape" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+    <style name="MemoryToolbarTitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+        <item name="android:textSize">18sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="MemoryLightActionMode" parent="Widget.AppCompat.ActionMode">
+        <item name="background">@color/memory_selection_light</item>
+        <item name="titleTextStyle">@style/MemoryToolbarTitle</item>
+    </style>
+    <style name="MemoryDarkActionMode" parent="Widget.AppCompat.ActionMode">
+        <item name="background">@color/memory_selection_dark</item>
+        <item name="titleTextStyle">@style/MemoryToolbarTitle</item>
+    </style>
+    <style name="MemoryGreenActionMode" parent="MemoryLightActionMode"><item name="background">@color/memory_selection_green</item></style>
+    <style name="MemoryBlueActionMode" parent="MemoryLightActionMode"><item name="background">@color/memory_selection_blue</item></style>
+</resources>
