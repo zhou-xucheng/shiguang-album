@@ -3,7 +3,7 @@ name: Publish Android release
 on:
   push:
     branches: [main]
-    paths: ['dist/**', '.github/workflows/publish.yml']
+    paths: ['dist/**', '.github/workflows/publish.yml', '.github/scripts/publish_release.py']
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: publish-android-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -35,16 +35,6 @@ jobs:
           git archive --format=zip --output=release-assets/shiguang-album-0.8.0-source.zip HEAD -- android-app README.md LICENSE CHANGELOG.md .gitignore
           (cd release-assets && sha256sum shiguang-album.apk shiguang-album-0.8.0-source.zip > SHA256SUMS.txt)
       - name: Upload all assets before publishing the release
+        timeout-minutes: 6
         shell: bash
-        run: |
-          set -euo pipefail
-          if gh release view "$TAG" --json isDraft --jq '.isDraft' > release-state.txt 2>/dev/null; then
-            if [ "$(cat release-state.txt)" != "true" ]; then
-              echo "Release already published; leaving its assets unchanged."
-              exit 0
-            fi
-          else
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "拾光相册 0.8.0" --notes-file dist/release-notes.md --draft
-          fi
-          gh release upload "$TAG" release-assets/shiguang-album.apk release-assets/shiguang-album-0.8.0-source.zip release-assets/SHA256SUMS.txt --clobber
-          gh release edit "$TAG" --draft=false --latest
+        run: python3 -u .github/scripts/publish_release.py
