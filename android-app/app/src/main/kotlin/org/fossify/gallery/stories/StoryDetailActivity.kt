@@ -20,10 +20,14 @@ class StoryDetailActivity : StoryActivity() {
             if (story.deletedAt != 0L) { finish(); return@safely }
             val actions = row()
             actions.addView(button("编辑故事") { startActivity(Intent(this, StoryEditorActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(button("播放故事", true) {
+            actions.addView(button("播放") {
                 if (story.moments.isEmpty()) message("先给故事添加片段")
                 else startActivity(Intent(this, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
-            }, LinearLayout.LayoutParams(0, -2, 1.35f))
+            }, LinearLayout.LayoutParams(0, -2, .8f))
+            actions.addView(button("分享", true) {
+                if (story.moments.isEmpty()) message("先给故事添加片段")
+                else startActivity(Intent(this, StoryShareActivity::class.java).putExtra("story_id", story.id))
+            }, LinearLayout.LayoutParams(0, -2, 1f))
             val content = page("故事", "", footer = actions)
             content.addFull(eyebrow(story.dateLabel()))
             content.space(12)
@@ -35,7 +39,7 @@ class StoryDetailActivity : StoryActivity() {
             facts.addView(badge("${story.moments.count { it.video }} 段视频"))
             content.addFull(facts); content.space(18)
             if (story.moments.isNotEmpty()) {
-                content.addFull(button("生成视频，分享给亲友") {
+                content.addFull(settingRow("分享给亲友", "做成视频相册，发到微信就能看") {
                     startActivity(Intent(this, StoryShareActivity::class.java).putExtra("story_id", story.id))
                 }); content.space(18)
             }

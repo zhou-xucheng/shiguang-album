@@ -23,8 +23,7 @@ class MemorySettingsActivity : StoryActivity() {
         }); content.space(24)
         content.addFull(eyebrow("回忆保管")); content.space(10)
         content.addFull(panel().apply {
-            addFull(feature(R.drawable.ic_memory_backup, "备份与恢复", StoryBackupStatus.summary(this@MemorySettingsActivity)) { startActivity(Intent(this@MemorySettingsActivity, MemoryBackupActivity::class.java)) })
-            rule(); addFull(feature(R.drawable.ic_memory_trash, "回收站", "找回删除的故事、照片与视频") { startActivity(Intent(this@MemorySettingsActivity, MemoryTrashActivity::class.java)) })
+            addFull(feature(R.drawable.ic_memory_trash, "回收站", "找回删除的故事、照片与视频") { startActivity(Intent(this@MemorySettingsActivity, MemoryTrashActivity::class.java)) })
         })
     }
     private fun feature(icon: Int, title: String, detail: String, action: () -> Unit) = row().apply {

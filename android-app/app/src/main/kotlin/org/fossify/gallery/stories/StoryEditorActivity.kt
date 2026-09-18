@@ -55,7 +55,11 @@ class StoryEditorActivity : StoryActivity() {
         dock.addView(button("完成", true) {
             if (story.moments.isEmpty()) message("请先添加照片或视频") else {
                 val wasDraft = story.draft; story.draft = false
-                if (save()) { closing = true; finish() } else story.draft = wasDraft
+                if (save()) {
+                    closing = true
+                    startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    finish()
+                } else story.draft = wasDraft
             }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         val content = page(if (story.draft) "制作故事" else "编辑故事", "", footer = dock)
@@ -98,7 +102,7 @@ class StoryEditorActivity : StoryActivity() {
         playback.addFull(settingRow("播放选项", "每张 ${story.intervalSeconds} 秒 · ${if (story.originalSound) "保留视频原声" else "关闭视频原声"}") { playbackOptions() })
         content.addFull(playback); content.space(18)
         val external = story.moments.count { Uri.parse(it.uri).scheme == "content" }
-        content.addFull(label(if (story.moments.isEmpty()) "添加成功后，这里会显示保存状态。" else if (external > 0) "有 $external 个旧版片段仍引用手机原文件。可保存独立副本，再到设置备份。" else "${story.moments.size} 个片段已保存到应用。卸载前，请到设置完整备份。", 14f, muted))
+        content.addFull(label(if (story.moments.isEmpty()) "添加成功后，这里会显示保存状态。" else if (external > 0) "有 $external 个旧版片段仍引用手机原文件，可保存独立副本。" else "${story.moments.size} 个片段已保存到应用，手机原图不受影响。卸载应用会清除故事及其副本。", 14f, muted))
         if (external > 0) content.addFull(button("保存旧片段的独立副本") {
             captureText(); importing = true
             backgroundWork("保存副本", { update ->
@@ -143,9 +147,7 @@ class StoryEditorActivity : StoryActivity() {
     }
     private fun pickMedia() {
         captureText()
-        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-        picker.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*")).putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-        startActivityForResult(picker, 401)
+        startActivityForResult(Intent(this, StoryMediaPickerActivity::class.java), 401)
     }
     private fun importMedia(uris: List<Uri>) {
         captureText(); importing = true

@@ -18,6 +18,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import org.fossify.commons.extensions.*
 import org.fossify.shiguang.R
 import org.fossify.shiguang.activities.MainActivity
+import org.fossify.shiguang.activities.MediaActivity
+import org.fossify.shiguang.extensions.config
+import org.fossify.shiguang.helpers.DIRECTORY
 
 /** Shared navigation and surfaces for the gallery and story screens. */
 object MemoryChrome {
@@ -31,8 +34,15 @@ object MemoryChrome {
     }
     fun navigate(a: Activity, target: Class<*>) {
         if (a.javaClass == target) return
-        a.startActivity(Intent(a, target).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        // Enter the current gallery view directly instead of flashing the folder activity first.
+        val actualTarget = if (target == MainActivity::class.java && a.config.showAll) MediaActivity::class.java else target
+        if (a.javaClass == actualTarget && a.intent.getStringExtra(DIRECTORY).isNullOrEmpty()) return
+        val intent = Intent(a, actualTarget).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        if (actualTarget == MediaActivity::class.java) intent.putExtra(DIRECTORY, "")
+        a.startActivity(intent, android.app.ActivityOptions.makeCustomAnimation(a, 0, 0).toBundle())
         if (a !is StoriesActivity) a.finish()
+        @Suppress("DEPRECATION")
+        a.overridePendingTransition(0, 0)
     }
     fun navigation(a: Activity, selected: Int): LinearLayout {
         val paper = a.getProperBackgroundColor()
@@ -69,7 +79,7 @@ object MemoryChrome {
         root.addView(nav)
         ViewCompat.setOnApplyWindowInsetsListener(nav) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(dp(a, 12) + bars.left, dp(a, 8), dp(a, 12) + bars.right, dp(a, 8) + bars.bottom); insets
+            view.setPadding(dp(a, 16) + bars.left, dp(a, 6), dp(a, 16) + bars.right, dp(a, 6) + bars.bottom); insets
         }
         return root
     }

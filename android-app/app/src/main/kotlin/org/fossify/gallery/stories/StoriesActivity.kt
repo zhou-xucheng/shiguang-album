@@ -126,5 +126,8 @@ class StoriesActivity : StoryActivity() {
             if (story.draft) open() else startActivity(Intent(this@StoriesActivity, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
         }.apply { strokeWidth = 0; setTextColor(accentText) })
         addFull(meta)
+        if (!story.draft) addFull(button("分享给亲友") {
+            startActivity(Intent(this@StoriesActivity, StoryShareActivity::class.java).putExtra("story_id", story.id))
+        }.apply { contentDescription = "分享故事：${story.title}"; setTextColor(accentText) })
     }
 }

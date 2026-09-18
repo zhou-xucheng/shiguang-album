@@ -20,7 +20,7 @@ class MemoryTrashActivity : StoryActivity() {
                     MemoryChrome.sheet(this@MemoryTrashActivity, story.title, actions = listOf(
                         MemoryChrome.Action("恢复故事") { safely { story.deletedAt = 0; store.save(story); render() } },
                         MemoryChrome.Action("彻底删除", "不会删除手机中的原始照片") {
-                            MemoryDialogBuilder(this@MemoryTrashActivity).setTitle("彻底删除这个故事？").setMessage("文字与编排无法找回。未备份的故事请先恢复并备份。")
+                            MemoryDialogBuilder(this@MemoryTrashActivity).setTitle("彻底删除这个故事？").setMessage("故事的文字、编排和应用内副本将无法找回，手机原图不受影响。")
                                 .setNegativeButton("取消", null).setPositiveButton("彻底删除") { _, _ -> safely { store.permanentlyDelete(story.id); render() } }.show()
                         }
                     ))
