@@ -53,9 +53,10 @@ class StorySharingActivity : StoryActivity() {
                 val uri = Uri.parse(m.uri)
                 if(uri.scheme == "file") { val file = File(uri.path ?: error("文件无法读取")); require(file.isFile); FileProvider.getUriForFile(this,BuildConfig.APPLICATION_ID+".provider",file) } else uri
             })
-            val type = if(moments.all { !it.video }) "image/*" else if(moments.all { it.video }) "video/*" else "*/*"
+            val fallbackType = if(moments.all { !it.video }) "image/*" else if(moments.all { it.video }) "video/*" else "*/*"
+            val type = if (uris.size == 1) contentResolver.getType(uris.first()) ?: fallbackType else fallbackType
             val clip = ClipData.newUri(contentResolver,"照片与视频",uris.first()); uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
-            val send = Intent(Intent.ACTION_SEND_MULTIPLE).setType(type).putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = clip }
+            val send = StoryShareIntents.media(uris, type, clip)
             startActivity(Intent.createChooser(send,"发送照片与视频"))
         }
     }

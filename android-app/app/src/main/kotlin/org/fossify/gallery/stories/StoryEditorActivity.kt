@@ -17,7 +17,6 @@ class StoryEditorActivity : StoryActivity() {
     private var step = 0
     private var textFieldsActive = false
     private var closing = false
-    private var importing = false
     private var mediaGrid: StoryTiles? = null
     private var mediaScrollState: android.os.Parcelable? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +25,8 @@ class StoryEditorActivity : StoryActivity() {
         mediaScrollState = savedInstanceState?.getParcelable("media_scroll")
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) { override fun handleOnBackPressed() { leavePage() } })
         if (!safely {
-            story = store.get(savedInstanceState?.getString("story_id") ?: intent.getStringExtra("story_id") ?: "") ?: Story(draft = true)
+            val id = savedInstanceState?.getString("story_id") ?: intent.getStringExtra("story_id")
+            story = store.get(id ?: "") ?: if (id != null) Story(id = id, draft = true) else Story(draft = true)
             render()
             if (savedInstanceState == null && intent.getStringExtra("story_id") == null) {
                 val paths = intent.getStringArrayListExtra("media_paths")
@@ -36,7 +36,7 @@ class StoryEditorActivity : StoryActivity() {
     }
     override fun onResume() {
         super.onResume()
-        if (::story.isInitialized && !importing) { store.get(story.id)?.let { story = it }; render() }
+        if (::story.isInitialized && !hasBackgroundWork) { store.get(story.id)?.let { story = it }; render() }
     }
     override fun onSaveInstanceState(outState: Bundle) {
         if (::story.isInitialized) outState.putString("story_id", story.id)
@@ -61,10 +61,10 @@ class StoryEditorActivity : StoryActivity() {
     }
     override fun onPause() {
         mediaScrollState = mediaGrid?.layoutManager?.onSaveInstanceState() ?: mediaScrollState
-        if (::story.isInitialized && !closing && !importing) save()
+        if (::story.isInitialized && !closing && !hasBackgroundWork) save()
         super.onPause()
     }
-    override fun leavePage() { if (save()) { if (step == 1) { step = 0; render() } else { closing = true; finish() } } }
+    override fun leavePage() { if (!hasBackgroundWork && save()) { if (step == 1) { step = 0; render() } else { closing = true; finish() } } }
     private fun render() {
         mediaScrollState = mediaGrid?.layoutManager?.onSaveInstanceState() ?: mediaScrollState
         mediaGrid = null
@@ -178,13 +178,13 @@ class StoryEditorActivity : StoryActivity() {
         startActivityForResult(Intent(this, StoryMediaPickerActivity::class.java), 401)
     }
     private fun importMedia(uris: List<Uri>) {
-        captureText(); importing = true
+        captureText()
         backgroundWork("添加照片与视频", { update ->
             val failures = mutableListOf<String>()
             var added = 0
             var duplicates = 0
-            try {
                 uris.forEachIndexed { index, uri ->
+                    if (Thread.currentThread().isInterrupted) throw java.io.InterruptedIOException("添加已中断，已保存的片段会保留")
                     if (story.moments.any { it.sourceUri == uri.toString() || it.uri == uri.toString() }) { duplicates++; return@forEachIndexed }
                     update("正在保存独立副本 ${index + 1} / ${uris.size}")
                     runCatching {
@@ -200,13 +200,18 @@ class StoryEditorActivity : StoryActivity() {
                         added++
                     }.onFailure { failures.add("${StoryMedia.name(applicationContext, uri)}：${it.message ?: "文件无法读取"}") }
                 }
-                Triple(added, duplicates, failures)
-            } finally { importing = false }
+                StoryImportResult(added, duplicates, failures)
         }) { result ->
-            render()
-            val summary = "已保存 ${result.first} 个片段" + if (result.second > 0) "，跳过 ${result.second} 个重复文件" else ""
-            if (result.third.isEmpty()) message(summary)
-            else MemoryDialogBuilder(this).setTitle("添加结果").setMessage("$summary\n${result.third.size} 个文件未保存：\n" + result.third.take(8).joinToString("\n") + if (result.third.size > 8) "\n其余失败文件请重新选择。" else "").setPositiveButton("知道了", null).show()
+            onBackgroundWorkRestored("添加照片与视频", result)
+        }
+    }
+    override fun onBackgroundWorkRestored(title: String, result: Any?) {
+        if (!::story.isInitialized) return
+        if (!safely { store.get(story.id)?.let { story = it }; render() }) return
+        if (result is StoryImportResult) {
+            val summary = "已保存 ${result.added} 个片段" + if (result.duplicates > 0) "，跳过 ${result.duplicates} 个重复文件" else ""
+            if (result.failures.isEmpty()) message(summary)
+            else MemoryDialogBuilder(this).setTitle("添加结果").setMessage("$summary\n${result.failures.size} 个文件未保存：\n" + result.failures.take(8).joinToString("\n") + if (result.failures.size > 8) "\n其余失败文件请重新选择。" else "").setPositiveButton("知道了", null).show()
         }
     }
     @Deprecated("Activity document picker")

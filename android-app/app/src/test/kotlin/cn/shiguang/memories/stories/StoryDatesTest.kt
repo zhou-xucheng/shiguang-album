@@ -4,14 +4,26 @@ import com.google.gson.Gson
 import org.junit.Assert.*
 import org.junit.Test
 import java.time.LocalDate
+import java.time.ZoneId
 
 class StoryDatesTest {
+    @Test fun zonedVideoDatesUseLocalCalendarDay() {
+        val china = ZoneId.of("Asia/Shanghai")
+        val west = ZoneId.of("America/Los_Angeles")
+        assertEquals("2026-09-20", StoryDates.parse("20260919T180000.000Z", china))
+        assertEquals("2026-09-18", StoryDates.parse("2026-09-19T01:00:00Z", west))
+        assertEquals("2026-09-20", StoryDates.parse("20260919T233000-0700", china))
+        assertEquals("2026-09-19", StoryDates.parse("2026:09:19 23:30:00", china))
+        assertNull(StoryDates.parse("20260919T990000Z", china))
+        assertFalse(StoryDates.credible(StoryDates.parse("19040101T000000.000Z", west)))
+        assertFalse(StoryDates.credible(StoryDates.parse("19700101T000000Z", west)))
+    }
     @Test fun zeroContainerDateFallsBackToLibraryInsteadOf1904() {
         assertEquals("2026-09-19" to "library", StoryDates.choose(StoryDates.parse("19040101T000000.000Z"), "2026-09-19"))
         assertEquals("" to "unknown", StoryDates.choose("1904-01-01", "1970-01-01"))
     }
     @Test fun dateParsingHandlesExifIsoCompactAndRejectsMalformedValues() {
-        listOf("20260919T100000.000Z", "2026-09-19T10:00:00Z", "2026:09:19 10:00:00").forEach { assertEquals("2026-09-19", StoryDates.parse(it)) }
+        listOf("20260919T100000.000Z", "2026-09-19T10:00:00Z", "2026:09:19 10:00:00").forEach { assertEquals("2026-09-19", StoryDates.parse(it, ZoneId.of("UTC"))) }
         assertNull(StoryDates.parse("20260230")); assertNull(StoryDates.parse("none")); assertNull(StoryDates.parse(null))
         assertFalse(StoryDates.credible("2099-01-01", LocalDate.of(2026,9,19)))
         assertTrue(StoryDates.credible("1950-05-01", LocalDate.of(2026,9,19)))

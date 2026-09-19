@@ -22,6 +22,10 @@ class StoryArrangeActivity : StoryActivity() {
     private var chooseCover = false
     private var dragHelper: ItemTouchHelper? = null
     private var scrollState: android.os.Parcelable? = null
+    override fun onBackgroundWorkRestored(title: String, result: Any?) {
+        if (!::story.isInitialized) return
+        if (safely { store.get(story.id)?.let { story = it }; render() } && result is Int) message("已更新 $result 个日期；无法确定的保持未知")
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!safely { story = store.get(intent.getStringExtra("story_id") ?: "") ?: error("故事不存在") }) { finish(); return }
@@ -109,6 +113,7 @@ class StoryArrangeActivity : StoryActivity() {
                         backgroundWork("识别日期", { update ->
                             var changed = 0
                             story.moments.forEachIndexed { i, moment ->
+                                if (Thread.currentThread().isInterrupted) throw java.io.InterruptedIOException("日期识别已中断，请重试")
                                 if (moment.dateSource == "manual" || (moment.dateSource.isNullOrBlank() && StoryDates.credible(moment.date))) return@forEachIndexed
                                 update("正在检查 ${i + 1} / ${story.moments.size}")
                                 var info = StoryMedia.captureDateInfo(applicationContext, Uri.parse(moment.sourceUri?.takeIf { it.isNotBlank() } ?: moment.uri), moment.video)

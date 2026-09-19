@@ -20,6 +20,43 @@ import org.fossify.shiguang.activities.SimpleActivity
 import org.fossify.shiguang.R
 
 abstract class StoryActivity : SimpleActivity() {
+    private val backgroundTask by lazy { androidx.lifecycle.ViewModelProvider(this)[StoryWork::class.java] }
+    protected val hasBackgroundWork get() = backgroundTask.state.value != null
+    private var progressDialog: androidx.appcompat.app.AlertDialog? = null
+    private var workCompletion: ((Any?) -> Unit)? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        backgroundTask.state.observe(this) { task ->
+            if (task == null) { progressDialog?.dismiss(); progressDialog = null; return@observe }
+            val result = task.result
+            if (result == null) {
+                if (progressDialog == null) progressDialog = MemoryDialogBuilder(this).setTitle(task.title)
+                    .setMessage(task.message).setCancelable(false).create().also { it.show() }
+                else progressDialog?.setMessage(task.message)
+            } else {
+                val completion = workCompletion; workCompletion = null
+                backgroundTask.consume()
+                result.onSuccess { value ->
+                    if (completion != null) completion(value) else onBackgroundWorkRestored(task.title, value)
+                }.onFailure {
+                    onBackgroundWorkRestored(task.title, null)
+                    MemoryDialogBuilder(this).setTitle("${task.title} 未完成")
+                        .setMessage(it.message ?: "请检查文件和可用空间后重试。")
+                        .setPositiveButton("知道了", null).show()
+                }
+            }
+        }
+    }
+
+    protected open fun onBackgroundWorkRestored(title: String, result: Any?) {
+        if (result != null) message("$title 已完成")
+    }
+
+    override fun onDestroy() {
+        progressDialog?.dismiss(); progressDialog = null; workCompletion = null
+        super.onDestroy()
+    }
     protected val store by lazy { StoryStore(this) }
     protected val ink get() = getProperTextColor()
     protected val paper get() = getProperBackgroundColor()
@@ -156,21 +193,10 @@ abstract class StoryActivity : SimpleActivity() {
     private var pageFooter: View? = null
     protected open fun leavePage() { finish() }
     protected fun <T> backgroundWork(title: String, work: ((String) -> Unit) -> T, done: (T) -> Unit) {
-        val progress = MemoryDialogBuilder(this).setTitle(title).setMessage("准备中…").setCancelable(false).create()
-        progress.show()
-        Thread {
-            val result = runCatching { work { status -> runOnUiThread { if (!isDestroyed) progress.setMessage(status) } } }
-            runOnUiThread {
-                if (!isDestroyed) {
-                    progress.dismiss()
-                    result.onSuccess(done).onFailure {
-                        MemoryDialogBuilder(this).setTitle("$title 未完成")
-                            .setMessage(it.message ?: "请检查文件和可用空间后重试。")
-                            .setPositiveButton("知道了", null).show()
-                    }
-                }
-            }
-        }.start()
+        if (hasBackgroundWork) return
+        @Suppress("UNCHECKED_CAST")
+        workCompletion = { value -> done(value as T) }
+        backgroundTask.start(title, work)
     }
 
     protected fun page(title: String, subtitle: String, back: Boolean = true, footer: View? = null, headerAction: View? = null): LinearLayout {

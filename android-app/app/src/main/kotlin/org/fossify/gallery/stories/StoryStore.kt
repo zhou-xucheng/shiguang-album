@@ -39,9 +39,11 @@ class StoryStore(context: Context) {
             story.updatedAt = items[index].updatedAt
             return@synchronized
         }
+        require(index < 0 || story.updatedAt == items[index].updatedAt) { "故事已在其他页面更新，请返回后重试。" }
+        val oldRevision = story.updatedAt
         story.updatedAt = maxOf(System.currentTimeMillis(), (items.getOrNull(index)?.updatedAt ?: 0) + 1)
         if (index < 0) items.add(story) else items[index] = story
-        write(items)
+        try { write(items) } catch (error: Exception) { story.updatedAt = oldRevision; throw error }
         releaseUnused(previousUris - referencedUris(items))
     }
 

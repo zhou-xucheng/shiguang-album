@@ -12,6 +12,32 @@ import java.util.zip.ZipOutputStream
 
 @Suppress("DEPRECATION")
 class StoryStorageTest : InstrumentationTestCase() {
+    fun testStaleSaveCannotOverwriteNewMediaOrDeleteItsFile() {
+        val store = StoryStore(context); val story = Story(title = "旧页面保护")
+        store.save(story)
+        val stale = store.get(story.id)!!
+        val photo = File(context.filesDir, "story-media/retained.jpg").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1)) }
+        story.addMoments(listOf(StoryMoment(uri = Uri.fromFile(photo).toString())))
+        store.save(story)
+        stale.title = "来自旧页面的修改"
+        assertTrue(runCatching { store.save(stale) }.isFailure)
+        assertEquals(story, store.get(story.id)); assertTrue(photo.exists())
+    }
+    fun testSingleAndMultipleSharesUseMatchingIntentContracts() {
+        val uri = Uri.parse("content://test/photo.jpg")
+        val second = Uri.parse("content://test/video.mp4")
+        val clip = android.content.ClipData.newRawUri("test", uri)
+        val single = StoryShareIntents.media(arrayListOf(uri), "image/jpeg", clip)
+        assertEquals(android.content.Intent.ACTION_SEND, single.action)
+        assertEquals(uri, single.getParcelableExtra<Uri>(android.content.Intent.EXTRA_STREAM))
+        assertEquals("image/jpeg", single.type)
+        assertEquals(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION, single.flags)
+        clip.addItem(android.content.ClipData.Item(second))
+        val multiple = StoryShareIntents.media(arrayListOf(uri, second), "*/*", clip)
+        assertEquals(android.content.Intent.ACTION_SEND_MULTIPLE, multiple.action)
+        assertEquals(arrayListOf(uri, second), multiple.getParcelableArrayListExtra<Uri>(android.content.Intent.EXTRA_STREAM))
+        assertEquals(2, multiple.clipData!!.itemCount)
+    }
     fun testExistingEmptyDraftCanBeTrashed() {
         val store = StoryStore(context)
         val draft = Story(draft = true, moments = mutableListOf(StoryMoment(uri = "content://test/photo")))
