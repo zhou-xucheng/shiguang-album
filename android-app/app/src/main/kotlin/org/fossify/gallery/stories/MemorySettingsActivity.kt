@@ -49,6 +49,22 @@ class MemoryAppearanceActivity : StoryActivity() {
             theme("暖夜", "柔和深棕，适合夜间", 0xFF25221F.toInt(), 0xFFF3ECE3.toInt(), 0xFFD9AD8C.toInt())
         ).forEach { content.addFull(it); content.space(12) }
         content.space(10)
+        val design = getSharedPreferences("memory-design", MODE_PRIVATE)
+        content.addFull(panel().apply {
+            fun option(title: String, key: String, default: Boolean) {
+                addFull(androidx.appcompat.widget.SwitchCompat(this@MemoryAppearanceActivity).apply {
+                    text = title; textSize = 16f; setTextColor(ink); minimumHeight = dp(56)
+                    isChecked = design.getBoolean(key, default)
+                    val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                    thumbTintList = ColorStateList(states, intArrayOf(accent, ColorUtils.blendARGB(paper, ink, .45f)))
+                    trackTintList = ColorStateList(states, intArrayOf(ColorUtils.blendARGB(paper, accent, .35f), ColorUtils.blendARGB(paper, ink, .18f)))
+                    setOnCheckedChangeListener { _, checked -> design.edit().putBoolean(key,checked).apply(); render() }
+                })
+            }
+            option("轻微纸张纹理", "paper", true)
+            option("减少浏览动效", "reduce_motion", false)
+            addFull(label("纹理只用于页面背景，不改变照片。",13f,muted))
+        }); content.space(16)
         content.addFull(panel().apply { addFull(settingRow("更多相册偏好", "字体、缩略图与图片编辑设置") { startActivity(Intent(this@MemoryAppearanceActivity, SettingsActivity::class.java)) }) })
     }
     private fun theme(name: String, detail: String, backgroundColor: Int, textColor: Int, primaryColor: Int) = row().apply {

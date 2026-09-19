@@ -18,74 +18,114 @@ class StoryArrangeActivity : StoryActivity() {
     private lateinit var story: Story
     private lateinit var list: RecyclerView
     private val selected = mutableSetOf<String>()
+    private var multi = false
     private var chooseCover = false
     private var dragHelper: ItemTouchHelper? = null
+    private var scrollState: android.os.Parcelable? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!safely { story = store.get(intent.getStringExtra("story_id") ?: "") ?: error("故事不存在") }) { finish(); return }
         chooseCover = intent.getBooleanExtra("choose_cover", false)
+        selected.addAll(savedInstanceState?.getStringArrayList("selected").orEmpty())
+        multi = savedInstanceState?.getBoolean("multi") ?: false
+        scrollState = savedInstanceState?.getParcelable("grid_scroll")
+        story.ensureOriginalOrder()
         render()
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putStringArrayList("selected", ArrayList(selected)); outState.putBoolean("multi", multi); super.onSaveInstanceState(outState)
+        outState.putParcelable("grid_scroll", list.layoutManager?.onSaveInstanceState())
+    }
     private fun render() {
-        val root = column().apply { setBackgroundColor(paper) }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> val b = insets.getInsets(WindowInsetsCompat.Type.systemBars()); v.setPadding(b.left, b.top, b.right, b.bottom); insets }
-        val header = row().apply { setPadding(dp(16), dp(10), dp(16), dp(10)) }
-        header.addView(iconButton(org.fossify.shiguang.R.drawable.ic_memory_back, "返回") { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label(if (chooseCover) "选择封面" else "整理片段", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(button("完成") { finish() }); root.addFull(header)
-        root.addFull(label(if (chooseCover) "点一张照片或视频，设为故事封面。" else "长按拖动排序 · 点文字编辑 · 勾选可批量移除", 14f, muted).apply { setPadding(dp(24), 0, dp(24), dp(12)) })
-        list = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@StoryArrangeActivity); setPadding(dp(16), 0, dp(16), dp(12)); clipToPadding = false
-            adapter = object : RecyclerView.Adapter<Holder>() {
-                override fun getItemCount() = story.moments.size
-                override fun onCreateViewHolder(parent: ViewGroup, type: Int): Holder = Holder(row().apply { layoutParams = RecyclerView.LayoutParams(-1, -2); setPadding(dp(8), dp(10), dp(8), dp(10)) })
-                override fun onBindViewHolder(holder: Holder, position: Int) {
-                    val moment = story.moments[position]; holder.box.removeAllViews()
-                    val image = ImageView(this@StoryArrangeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = shape(cardColor, 10); clipToOutline = true; contentDescription = "查看片段 ${position + 1}"; setOnClickListener { if (chooseCover) selectCover(moment) else openMoment(this@StoryArrangeActivity, story, holder.bindingAdapterPosition) } }
-                    Glide.with(this@StoryArrangeActivity).load(Uri.parse(moment.uri)).into(image); holder.box.addView(image, LinearLayout.LayoutParams(dp(68), dp(80)))
-                    val copy = column()
-                    copy.addFull(label("${position + 1} · ${if (moment.video) "视频" else "照片"}" + if (story.cover()?.id == moment.id) " · 封面" else "", 15f, bold = true))
-                    copy.addFull(label(StoryMedia.dateLabel(moment), 13f, muted)); copy.addFull(label(moment.caption.ifBlank { "添加描述" }, 15f).apply { maxLines = 2 })
-                    copy.setOnClickListener { if (chooseCover) selectCover(moment) else editMoment(moment) }
-                    holder.box.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
-                    if (!chooseCover) holder.box.addView(label("≡", 25f, muted).apply {
-                        gravity = Gravity.CENTER; contentDescription = "拖动片段 ${position + 1} 排序"
-                        setOnTouchListener { _, event -> if (event.actionMasked == MotionEvent.ACTION_DOWN) dragHelper?.startDrag(holder); true }
-                    }, LinearLayout.LayoutParams(dp(40), dp(48)))
-                    if (!chooseCover) holder.box.addView(CheckBox(this@StoryArrangeActivity).apply {
-                        contentDescription = "选择片段 ${position + 1}"; isChecked = selected.contains(moment.id); buttonTintList = android.content.res.ColorStateList.valueOf(accent)
-                        setOnCheckedChangeListener { _, checked -> if (checked) selected.add(moment.id) else selected.remove(moment.id) }
-                    })
-                }
-            }
+        if (::list.isInitialized) scrollState = list.layoutManager?.onSaveInstanceState()
+        val footer = if (multi && !chooseCover) button("批量操作 · 已选 ${selected.size} 个", true) { batchActions() } else button("完成", true) { finish() }
+        val body = fixedPage(if (chooseCover) "选择封面" else "整理照片与视频", footer)
+        val head = column().apply { setPadding(dp(24), dp(4), dp(24), dp(12)) }
+        head.addFull(label(if (chooseCover) "点一张喜欢的照片，调整封面位置。" else if (multi) "轻点勾选，可批量改日期、移动或移除。" else "轻点查看或编辑 · 长按拖动排序", 14f, muted))
+        if (!chooseCover) {
+            val tools = row()
+            tools.addView(button("排序") { confirmDateSort(story) { if (safely { store.save(story) }) list.adapter?.notifyDataSetChanged() } }, LinearLayout.LayoutParams(0,-2,1f))
+            tools.addView(button(if (multi) "取消多选" else "多选") { multi = !multi; selected.clear(); render() }, LinearLayout.LayoutParams(0,-2,1.2f))
+            tools.addView(button("日期") { dateActions() }, LinearLayout.LayoutParams(0,-2,1f))
+            head.addFull(tools)
+            if (multi) head.addFull(button(if (selected.size == story.moments.size) "取消全选" else "全选") { if (selected.size == story.moments.size) selected.clear() else selected.addAll(story.moments.map { it.id }); render() }.apply { strokeWidth = 0 })
         }
-        if (!chooseCover) dragHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
-            override fun onMove(rv: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-                val from = source.bindingAdapterPosition; val to = target.bindingAdapterPosition
-                if (from < 0 || to < 0) return false
-                story.moveMoment(from, to); rv.adapter?.notifyItemMoved(from, to); return true
-            }
-            override fun onSwiped(holder: RecyclerView.ViewHolder, direction: Int) {}
-            override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) { super.clearView(rv, holder); safely { store.save(story) }; rv.adapter?.notifyDataSetChanged() }
-        }).also { it.attachToRecyclerView(list) }
-        root.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
-        val actions = row().apply { setPadding(dp(24), dp(8), dp(24), dp(8)) }
-        if (chooseCover) actions.addView(button("调整当前封面") { story.cover()?.let { selectCover(it) } }, LinearLayout.LayoutParams(-1, -2))
-        else {
-            actions.addView(button("按日期") { confirmDateSort(story) { if (safely { store.save(story) }) list.adapter?.notifyDataSetChanged() } }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(button("全选") { selected.addAll(story.moments.map { it.id }); list.adapter?.notifyDataSetChanged() }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(button("移除所选") {
-                if (selected.isEmpty()) { message("先勾选要移除的片段"); return@button }
-                MemoryDialogBuilder(this).setTitle("移除 ${selected.size} 个片段？").setMessage("只从这个故事移除，手机原图会保留。")
+        body.addFull(head)
+        val grid = StoryTiles(this, story.moments, { it.id in selected }, details = true) { index ->
+            val moment = story.moments[index]
+            if (chooseCover) selectCover(moment)
+            else if (multi) { if (!selected.add(moment.id)) selected.remove(moment.id); val state = list.layoutManager?.onSaveInstanceState(); render(); list.layoutManager?.onRestoreInstanceState(state) }
+            else MemoryChrome.sheet(this, "第 ${index + 1} 个片段", actions = listOf(
+                MemoryChrome.Action("查看大图") { openMoment(this, story, index) },
+                MemoryChrome.Action("文字与日期") { editMoment(moment) },
+                MemoryChrome.Action("设为封面") { selectCover(moment) }
+            ))
+        }
+        list = grid
+        if (!chooseCover && !multi) {
+            dragHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(15, 0) {
+                override fun isLongPressDragEnabled() = false
+                override fun onMove(rv: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                    val from = source.bindingAdapterPosition; val to = target.bindingAdapterPosition
+                    if (from < 0 || to < 0) return false
+                    story.moveMoment(from, to); rv.adapter?.notifyItemMoved(from, to); return true
+                }
+                override fun onSwiped(holder: RecyclerView.ViewHolder, direction: Int) {}
+                override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) { super.clearView(rv, holder); safely { store.save(story) }; rv.adapter?.notifyDataSetChanged() }
+            }).also { it.attachToRecyclerView(grid) }
+            grid.longPress = { dragHelper?.startDrag(it) }
+        }
+        body.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        grid.layoutManager?.onRestoreInstanceState(scrollState)
+    }
+    private fun batchActions() {
+        if (selected.isEmpty()) { message("先选择照片或视频"); return }
+        MemoryChrome.sheet(this, "已选择 ${selected.size} 个", actions = listOf(
+            MemoryChrome.Action("修改所选日期") { batchDate() },
+            MemoryChrome.Action("移到开头") { story.moveSelected(selected, true); safely { store.save(story) }; render() },
+            MemoryChrome.Action("移到末尾") { story.moveSelected(selected, false); safely { store.save(story) }; render() },
+            MemoryChrome.Action("从故事移除", "手机原图保留") {
+                MemoryDialogBuilder(this).setTitle("移除 ${selected.size} 个片段？").setMessage("仅从这个故事移除，不删除手机原图。")
                     .setNegativeButton("取消", null).setPositiveButton("移除") { _, _ ->
                         story.moments.removeAll { it.id in selected }; selected.clear(); if (story.moments.isEmpty()) story.draft = true
-                        safely { store.save(story) }; list.adapter?.notifyDataSetChanged()
+                        if (safely { store.save(story) }) render()
                     }.show()
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-        root.addFull(actions); setContentView(root); root.post { ViewCompat.requestApplyInsets(root) }
+            }
+        ))
     }
-    private class Holder(val box: LinearLayout) : RecyclerView.ViewHolder(box)
+    private fun batchDate() {
+        val today = LocalDate.now()
+        DatePickerDialog(this, { _, y, m, d ->
+            val date = LocalDate.of(y, m + 1, d).toString()
+            story.moments.filter { it.id in selected }.forEach { it.date = date; it.dateSource = "manual"; it.dateVerified = true }
+            if (safely { store.save(story) }) render()
+        }, today.year, today.monthValue - 1, today.dayOfMonth).show()
+    }
+    private fun dateActions() {
+        MemoryChrome.sheet(this, "照片日期", "自动日期来自文件或系统相册；不确定的日期不参与排序。", listOf(
+            MemoryChrome.Action("重新识别自动日期", "保留已手动确认的日期") {
+                MemoryDialogBuilder(this).setTitle("重新识别日期？").setMessage("优先处理未知或异常日期。旧版没有记录修改来源，正常旧日期会保留；旧版异常日期若曾手动填写，请先逐张确认。不会改动照片原文件。")
+                    .setNegativeButton("取消", null).setPositiveButton("重新识别") { _, _ ->
+                        backgroundWork("识别日期", { update ->
+                            var changed = 0
+                            story.moments.forEachIndexed { i, moment ->
+                                if (moment.dateSource == "manual" || (moment.dateSource.isNullOrBlank() && StoryDates.credible(moment.date))) return@forEachIndexed
+                                update("正在检查 ${i + 1} / ${story.moments.size}")
+                                var info = StoryMedia.captureDateInfo(applicationContext, Uri.parse(moment.sourceUri?.takeIf { it.isNotBlank() } ?: moment.uri), moment.video)
+                                if (info.first.isBlank()) info = StoryMedia.captureDateInfo(applicationContext, Uri.parse(moment.uri), moment.video)
+                                if (info.first.isNotBlank() || !StoryDates.credible(moment.date)) {
+                                    if (moment.date != info.first) changed++
+                                    moment.date = info.first; moment.dateSource = info.second; moment.dateVerified = info.first.isNotBlank()
+                                }
+                            }
+                            if (!story.dateManual && !StoryDates.credible(story.date)) { story.date = ""; story.dateConfirmed = false }
+                            store.save(story); changed
+                        }) { count -> render(); message("已更新 $count 个日期；无法确定的保持未知") }
+                    }.show()
+            },
+            MemoryChrome.Action("批量修改日期", "先多选需要调整的照片") { multi = true; render() }
+        ))
+    }
     private fun selectCover(moment: StoryMoment) {
         val draft = story.copy(coverId = moment.id)
         if (story.cover()?.id != moment.id) { draft.coverX = .5f; draft.coverY = .5f }
@@ -126,13 +166,15 @@ class StoryArrangeActivity : StoryActivity() {
         editor.addFull(caption)
         var date = moment.date
         var verified = moment.dateVerified
+        var manual = moment.dateSource == "manual"
         val dateButton = button(StoryMedia.dateLabel(moment)) {}
         dateButton.setOnClickListener {
             val d = runCatching { LocalDate.parse(date) }.getOrElse { LocalDate.now() }
-            DatePickerDialog(this, { _, y, m, day -> date = LocalDate.of(y, m + 1, day).toString(); verified = true; dateButton.text = date }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+            DatePickerDialog(this, { _, y, m, day -> date = LocalDate.of(y, m + 1, day).toString(); verified = true; manual = true; dateButton.text = date }, d.year, d.monthValue - 1, d.dayOfMonth).show()
         }
         editor.addFull(dateButton)
+        editor.addFull(button("日期未知") { date = ""; verified = false; manual = true; dateButton.text = "日期未知" })
         MemoryDialogBuilder(this).setTitle("片段文字与日期").setView(editor).setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ -> moment.caption = caption.text.toString().trim(); moment.date = date; moment.dateVerified = verified; if (safely { store.save(story) }) list.adapter?.notifyDataSetChanged() }.show()
+            .setPositiveButton("保存") { _, _ -> moment.caption = caption.text.toString().trim(); moment.date = date; moment.dateVerified = verified; if (manual) moment.dateSource = "manual"; if (safely { store.save(story) }) list.adapter?.notifyDataSetChanged() }.show()
     }
 }

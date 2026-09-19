@@ -230,7 +230,7 @@ class StoryPlayerActivity : StoryActivity() {
                     if (generation == renderGeneration) handler.post {
                         if (disposed || generation != renderGeneration) return@post
                         progress.visibility = View.GONE; ready = true
-                        if (story.transition) { image.alpha = 0f; image.animate().alpha(1f).setDuration(650).start() }
+                        if (story.transition && !MemoryPaper.reducedMotion(this@StoryPlayerActivity)) { image.alpha = 0f; image.animate().alpha(1f).setDuration(350).start() }
                         if (playing) schedulePhoto()
                     }
                     return false

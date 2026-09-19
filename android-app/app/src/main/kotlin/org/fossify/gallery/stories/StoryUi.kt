@@ -121,16 +121,39 @@ abstract class StoryActivity : SimpleActivity() {
     }
 
     protected fun confirmDateSort(story: Story, done: () -> Unit) {
-        val summary = story.dateGroups().entries.sortedBy { it.key.ifBlank { "9999" } }.joinToString("\n") { (date, moments) ->
-            "${date.ifBlank { "日期待确认，保留原顺序" }} · ${moments.size} 个片段"
-        }
-        val text = "根据已确认的拍摄日期分组：\n\n$summary\n\n确认后按日期排列，未确认的片段放在最后。"
-        val scroll = ScrollView(this).apply { addView(label(text, 15f).apply { setPadding(dp(24), dp(8), dp(24), dp(8)) }) }
-        MemoryDialogBuilder(this).setTitle("按日期整理").setView(scroll).setNegativeButton("保留当前顺序", null)
-            .setPositiveButton("按日期排列") { _, _ -> story.sortChronologically(); done() }.show()
+        story.ensureOriginalOrder()
+        MemoryDialogBuilder(this).setTitle("照片顺序").setItems(arrayOf("选择时的顺序", "拍摄时间 · 从早到晚", "拍摄时间 · 从晚到早")) { _, which ->
+            val before = story.moments.map { it.id }
+            if (which == 0) story.restoreOriginalOrder() else story.sortChronologically(which == 2)
+            val after = story.moments.map { it.id }; done()
+            com.google.android.material.snackbar.Snackbar.make(window.decorView, if (which == 0) "已恢复选择顺序" else "已排序，未知日期放在最后", com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE)
+                .setAnchorView(pageFooter)
+                .setAction("撤销") {
+                    if (story.moments.map { it.id } == after) { story.moments.sortBy { before.indexOf(it.id) }; done() }
+                    else message("顺序已再次调整，保留当前结果")
+                }.show()
+        }.setNegativeButton("取消", null).show()
+    }
+
+    protected fun fixedPage(title: String, footer: View? = null): LinearLayout {
+        val unused = page(title, "", footer = footer)
+        val scroll = pageScroll!!; val root = scroll.parent as LinearLayout
+        root.removeView(scroll); pageScroll = null
+        val body = column()
+        root.addView(body, 1, LinearLayout.LayoutParams(-1, 0, 1f))
+        return body
+    }
+
+    protected fun overview(story: Story, selected: Int = 0, pick: (Int) -> Unit) {
+        val dialog = MemoryDialogBuilder(this).setTitle("全部照片 · ${story.moments.size}").setNegativeButton("关闭", null).create()
+        val grid = StoryTiles(this, story.moments, { it.id == story.moments.getOrNull(selected)?.id }) { index -> dialog.dismiss(); pick(index) }
+        dialog.setView(grid); dialog.show()
+        grid.layoutParams = grid.layoutParams.apply { height = (resources.displayMetrics.heightPixels * .62f).toInt() }
+        grid.scrollToPosition(selected)
     }
 
     protected var pageScroll: ScrollView? = null
+    private var pageFooter: View? = null
     protected open fun leavePage() { finish() }
     protected fun <T> backgroundWork(title: String, work: ((String) -> Unit) -> T, done: (T) -> Unit) {
         val progress = MemoryDialogBuilder(this).setTitle(title).setMessage("准备中…").setCancelable(false).create()
@@ -152,7 +175,7 @@ abstract class StoryActivity : SimpleActivity() {
 
     protected fun page(title: String, subtitle: String, back: Boolean = true, footer: View? = null, headerAction: View? = null): LinearLayout {
         val previousScroll = pageScroll?.scrollY ?: 0
-        val root = column().apply { setBackgroundColor(paper) }
+        val root = column().apply { background = MemoryPaper.background(this@StoryActivity, paper) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -170,11 +193,13 @@ abstract class StoryActivity : SimpleActivity() {
         pageScroll = scroll
         scroll.post { scroll.scrollTo(0, previousScroll) }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        if (footer?.tag == "memory-navigation") root.addFull(footer)
+        pageFooter = null
+        if (footer?.tag == "memory-navigation") { root.addFull(footer); pageFooter = footer }
         else if (footer != null) {
             val dock = column().apply { setBackgroundColor(surfaceColor); setPadding(dp(20), dp(8), dp(20), dp(10)) }
             dock.addFull(footer)
             root.addFull(dock)
+            pageFooter = dock
         }
         setContentView(root)
         root.post { ViewCompat.requestApplyInsets(root) }

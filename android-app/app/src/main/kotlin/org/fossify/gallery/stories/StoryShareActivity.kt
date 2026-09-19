@@ -63,7 +63,7 @@ class StoryShareActivity : StoryActivity() {
         val action = if (working) null else button(if (output != null) "分享到微信" else "生成分享视频", true) {
             if (output != null) share(true) else startExport()
         }
-        val content = page("分享故事", "", footer = action)
+        val content = page("导出视频", "", footer = action)
         content.addFull(label(if (output != null) "视频已做好，点下方「分享到微信」，再选择亲友发送。" else "选样式 → 生成视频 → 发给亲友", 15f, accentText, true))
         content.space(14)
         content.addFull(editorial(story.title, 25f).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })

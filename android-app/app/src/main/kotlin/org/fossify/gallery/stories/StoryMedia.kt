@@ -70,27 +70,30 @@ object StoryMedia {
         val type = type(context, uri)
         require(type.startsWith("image/") || type.startsWith("video/")) { "不是照片或视频" }
         val video = type.startsWith("video/")
-        val date = captureDate(context, uri, video)
-        return StoryMoment(uri = copy(context, uri), video = video, date = date, sourceUri = uri.toString(), dateVerified = date.isNotBlank())
+        val (date, source) = captureDateInfo(context, uri, video)
+        return StoryMoment(uri = copy(context, uri), video = video, date = date, sourceUri = uri.toString(), dateVerified = date.isNotBlank(), dateSource = source)
     }
-    fun captureDate(context: Context, uri: Uri, video: Boolean): String {
+    fun captureDate(context: Context, uri: Uri, video: Boolean): String = captureDateInfo(context, uri, video).first
+    fun captureDateInfo(context: Context, uri: Uri, video: Boolean): Pair<String, String> {
         val embedded = runCatching {
             if (video) {
                 val reader = MediaMetadataRetriever()
-                try { reader.setDataSource(context, uri); reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)?.take(8)?.let { "${it.take(4)}-${it.substring(4, 6)}-${it.takeLast(2)}" } }
+                try { reader.setDataSource(context, uri); StoryDates.parse(reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)) }
                 finally { reader.release() }
-            } else open(context, uri.toString()).use { ExifInterface(it).getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)?.take(10)?.replace(':', '-') }
+            } else open(context, uri.toString()).use { StoryDates.parse(ExifInterface(it).getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)) }
         }.getOrNull()
-        if (embedded != null && runCatching { LocalDate.parse(embedded) }.isSuccess) return embedded
-        return runCatching {
+        val library = runCatching {
             context.contentResolver.query(uri, arrayOf("datetaken"), null, null, null)?.use {
                 if (it.moveToFirst() && !it.isNull(0) && it.getLong(0) > 0) java.time.Instant.ofEpochMilli(it.getLong(0)).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() else ""
             }.orEmpty()
         }.getOrDefault("")
+        return StoryDates.choose(embedded, library)
     }
     fun dateLabel(moment: StoryMoment) = when {
-        moment.date.isBlank() -> "拍摄日期待确认"
+        moment.date.isBlank() -> "日期未知"
+        moment.dateSource != "manual" && !StoryDates.credible(moment.date) -> "日期待核对"
         !moment.dateVerified -> moment.date.replace('-', '.') + " · 待核对"
+        moment.dateSource == "manual" -> moment.date.replace('-', '.') + " · 已确认"
         else -> moment.date.replace('-', '.')
     }
 }

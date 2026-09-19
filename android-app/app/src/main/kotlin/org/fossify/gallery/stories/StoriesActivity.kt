@@ -2,132 +2,112 @@ package org.fossify.shiguang.stories
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.View
-import android.view.ViewGroup
-import android.view.Gravity
-import android.content.res.ColorStateList
-import android.graphics.Color
-import androidx.core.graphics.ColorUtils
+import android.view.*
 import android.widget.*
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import org.fossify.shiguang.R
 
 class StoriesActivity : StoryActivity() {
     private var query = ""
-    private var drafts = false
-    private var searching = false
+    private var section = 0
+    private var year = "全部年份"
+    private var compact = true
+    private var order = 0
     private var list: RecyclerView? = null
-    private var allStories = listOf<Story>()
-    private var displayed = listOf<Story>()
+    private var all = listOf<Story>()
+    private var shown = listOf<Story>()
+    private val prefs by lazy { getSharedPreferences("story-shelf", MODE_PRIVATE) }
+    override fun onCreate(state: Bundle?) {
+        super.onCreate(state); query = state?.getString("query").orEmpty(); section = state?.getInt("section") ?: 0
+        year = state?.getString("year") ?: "全部年份"; compact = prefs.getBoolean("compact", true); order = prefs.getInt("order", 0)
+    }
+    override fun onSaveInstanceState(out: Bundle) { out.putString("query", query); out.putInt("section", section); out.putString("year", year); super.onSaveInstanceState(out) }
     override fun onResume() { super.onResume(); render() }
     private fun render() {
-        val state = list?.layoutManager?.onSaveInstanceState()
-        if (!safely { allStories = store.all().filter { it.deletedAt == 0L }.sortedByDescending { it.updatedAt } }) return
-        val root = column().apply { setBackgroundColor(paper) }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars()); view.setPadding(b.left, b.top, b.right, b.bottom); insets
-        }
-        val header = row().apply { setPadding(dp(24), dp(10), dp(24), dp(4)) }
-        val identity = column().apply {
-            addFull(editorial("拾光", 28f))
-
-        }
-        header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(iconButton(R.drawable.ic_memory_search, "搜索故事") { searching = !searching; if (!searching) query = ""; render() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(button("＋ 新故事", true) { startActivity(Intent(this, StoryEditorActivity::class.java)) }.apply { textSize = 14f })
-        root.addFull(header)
-        val search = EditText(this).apply {
-            hint = "搜索故事、文字或年份"; setText(query); textSize = 15f; isSingleLine = true
-            setTextColor(ink); setHintTextColor(muted); background = shape(surfaceColor, 16).apply { setStroke(dp(1), lineColor) }
-            setPadding(dp(16), dp(10), dp(16), dp(10)); minimumHeight = dp(48)
+        val scroll = list?.layoutManager?.onSaveInstanceState()
+        if (!safely { all = store.all().filter { it.deletedAt == 0L } }) return
+        val root = column().apply { background = MemoryPaper.background(this@StoriesActivity, paper) }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets -> val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()); v.setPadding(b.left,b.top,b.right,b.bottom); insets }
+        val header = row().apply { setPadding(dp(24), dp(12), dp(24), dp(6)) }
+        header.addView(column().apply { addFull(editorial("拾光", 29f)); addFull(label("把日子，收进相册", 12f, muted)) }, LinearLayout.LayoutParams(0,-2,1f))
+        header.addView(button("＋ 新故事", true) { startActivity(Intent(this, StoryEditorActivity::class.java)) }); root.addFull(header)
+        val tools = column().apply { setPadding(dp(24), dp(8), dp(24), dp(6)) }
+        tools.addFull(EditText(this).apply {
+            hint = "搜索名称、文字或年份"; contentDescription = "搜索故事"; setText(query); textSize = 15f; isSingleLine = true
+            setTextColor(ink); setHintTextColor(muted); background = shape(surfaceColor, 14).apply { setStroke(dp(1), lineColor) }; setPadding(dp(16),dp(10),dp(16),dp(10)); minimumHeight = dp(48)
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { query = s.toString(); filter() }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { query = s.toString(); filter(); list?.scrollToPosition(0) }
                 override fun afterTextChanged(s: Editable?) {}
             })
-        }
-        val tools = column().apply { setPadding(dp(24), dp(4), dp(24), dp(4)) }
-        if (searching) tools.addFull(search)
-        val tabs = row()
-        tabs.addView(button("故事 ${allStories.count { !it.draft }}") { drafts = false; render() }, LinearLayout.LayoutParams(0, -2, 1f))
-        tabs.addView(button("草稿 ${allStories.count { it.draft }}") { drafts = true; render() }, LinearLayout.LayoutParams(0, -2, 1f))
-        for (i in 0 until tabs.childCount) {
-            val tab = tabs.getChildAt(i) as com.google.android.material.button.MaterialButton
-            val active = if (drafts) i == 1 else i == 0
-            tab.strokeWidth = 0
-            tab.setTextColor(if (active) accentText else muted)
-            tab.backgroundTintList = ColorStateList.valueOf(if (active) ColorUtils.blendARGB(paper, accent, .09f) else Color.TRANSPARENT)
-            if (active) tab.typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }
-        if (searching) tools.space(8); tools.addFull(tabs); root.addFull(tools)
+        })
+        val sections = row()
+        listOf("全部", "收藏", "草稿").forEachIndexed { index, title -> sections.addView(button(title, section == index) { section = index; list = null; render() }.apply { textSize = 14f; strokeWidth = 0 }, LinearLayout.LayoutParams(0,-2,1f)) }
+        tools.addFull(sections)
+        val filters = row()
+        filters.addView(button(year) {
+            val years = listOf("全部年份") + all.map { it.year() }.distinct().sortedDescending()
+            MemoryDialogBuilder(this).setTitle("按年份找故事").setItems(years.toTypedArray()) { _, i -> year = years[i]; list = null; render() }.show()
+        }.apply { textSize = 13f }, LinearLayout.LayoutParams(0,-2,1.15f))
+        filters.addView(button(listOf("最近修改", "故事日期", "名称顺序")[order]) {
+            MemoryDialogBuilder(this).setTitle("故事排列").setItems(arrayOf("最近修改", "故事日期", "名称顺序")) { _, i -> order = i; prefs.edit().putInt("order", order).apply(); filter() }.show()
+        }.apply { textSize = 13f }, LinearLayout.LayoutParams(0,-2,1.15f))
+        filters.addView(button(if (compact) "大封面" else "网格") { compact = !compact; prefs.edit().putBoolean("compact", compact).apply(); list = null; render() }.apply { textSize = 13f }, LinearLayout.LayoutParams(0,-2,.9f))
+        tools.addFull(filters); root.addFull(tools)
+        val columns = if (compact && resources.configuration.fontScale <= 1.2f) 2 else 1
+        val manager = GridLayoutManager(this, columns).apply { spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() { override fun getSpanSize(position: Int) = if (shown.isEmpty()) columns else 1 } }
         list = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@StoriesActivity); setPadding(dp(24), dp(6), dp(24), dp(20)); clipToPadding = false
+            layoutManager = manager; setPadding(dp(18), dp(4), dp(18), dp(12)); clipToPadding = false
             adapter = object : RecyclerView.Adapter<Holder>() {
-                override fun getItemCount() = displayed.size.coerceAtLeast(1)
-                override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(column().apply { layoutParams = RecyclerView.LayoutParams(-1, -2) })
+                override fun getItemCount() = shown.size.coerceAtLeast(1)
+                override fun onCreateViewHolder(parent: ViewGroup, type: Int) = Holder(column().apply { layoutParams = RecyclerView.LayoutParams(-1,-2); setPadding(dp(6),dp(6),dp(6),dp(12)) })
                 override fun onBindViewHolder(holder: Holder, position: Int) {
-                    holder.box.removeAllViews(); holder.box.addFull(if (displayed.isEmpty()) empty() else storyCard(displayed[position])); holder.box.space(18)
+                    holder.box.removeAllViews()
+                    if (shown.isEmpty()) { holder.box.addFull(editorial(if (all.isEmpty()) "从喜欢的照片开始" else "这里还没有故事", 24f)); holder.box.space(12); holder.box.addFull(label(if (all.isEmpty()) "点右上角新故事，把照片整理成一本相册。" else "试试其他年份、分类或搜索词。", 15f, muted)) }
+                    else holder.box.addFull(card(shown[position], columns == 2))
                 }
             }
         }
-        root.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addFull(MemoryChrome.navigation(this, 0)); setContentView(root)
-        filter(); list?.layoutManager?.onRestoreInstanceState(state)
-        root.post { ViewCompat.requestApplyInsets(root) }
+        root.addView(list, LinearLayout.LayoutParams(-1,0,1f)); root.addFull(MemoryChrome.navigation(this,0)); setContentView(root)
+        filter(); manager.onRestoreInstanceState(scroll); root.post { ViewCompat.requestApplyInsets(root) }
     }
     private class Holder(val box: LinearLayout) : RecyclerView.ViewHolder(box)
     private fun filter() {
-        displayed = allStories.filter { it.draft == drafts && (query.isBlank() || (it.title + it.description + it.date + it.moments.joinToString { m -> m.caption + m.date }).contains(query, true)) }
+        val sorter = compareByDescending<Story> { it.pinned }.thenComparator { a,b -> when(order) {
+            1 -> compareValues(if (b.year() == "未注明") "" else b.date, if (a.year() == "未注明") "" else a.date)
+            2 -> a.title.compareTo(b.title)
+            else -> b.updatedAt.compareTo(a.updatedAt)
+        } }
+        shown = all.filter { s -> (if (section == 2) s.draft else !s.draft && (section != 1 || s.favorite)) &&
+            (year == "全部年份" || s.year() == year) && (query.isBlank() || (s.title + s.description + s.date + s.moments.joinToString { it.caption + it.date }).contains(query,true)) }.sortedWith(sorter)
         list?.adapter?.notifyDataSetChanged()
     }
-    private fun empty(): View = panel().apply {
-        if (query.isNotBlank()) { addFull(label("没有找到相关故事", 20f)); space(8); addFull(label("试试其他名字或年份。", 15f, muted)) }
-        else if (drafts) { addFull(label("还没有草稿", 20f)); space(8); addFull(label("未完成的故事会保存在这里。", 15f, muted)) }
-        else {
-            addFull(ImageView(this@StoriesActivity).apply { setImageResource(R.drawable.memory_still_life); scaleType = ImageView.ScaleType.CENTER_CROP; contentDescription = "一本等待放入照片的相簿" }, 180)
-            space(20); addFull(label("从几张喜欢的照片开始", 22f, bold = true)); space(8)
-            addFull(label("选好照片和视频，就能播放。标题和文字可以慢慢补。", 15f, muted)); space(16)
-            addFull(button("选择照片与视频", true) { startActivity(Intent(this@StoriesActivity, StoryEditorActivity::class.java)) })
-        }
+    private fun card(story: Story, small: Boolean) = column().apply {
+        background = shape(surfaceColor,20).apply { setStroke(dp(1),lineColor) }; clipToOutline = true
+        val open = { startActivity(Intent(this@StoriesActivity, if (story.draft) StoryEditorActivity::class.java else StoryDetailActivity::class.java).putExtra("story_id",story.id)) }
+        val image = StoryCoverView(this@StoriesActivity).apply { position(story); contentDescription = "打开故事：${story.title}"; setOnClickListener { open() } }
+        story.cover()?.let { Glide.with(image).load(Uri.parse(it.uri)).override(if (small) 600 else 1100).dontTransform().into(image) }
+        addFull(image, if (small) 148 else 230)
+        val copy = column().apply { setPadding(dp(14),dp(12),dp(14),dp(10)) }
+        copy.addFull(label((if (story.pinned) "置顶 · " else "") + (if (story.favorite) "收藏 · " else "") + if (story.date.isBlank()) "" else story.dateLabel(), 12f,accentText))
+        copy.space(5); copy.addFull(label(story.title, if (small) 18f else 23f, bold = true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END; setOnClickListener { open() } })
+        copy.space(7); copy.addFull(label("${story.moments.count { !it.video }} 张照片 · ${story.moments.count { it.video }} 段视频",12f,muted))
+        val actions = row()
+        actions.addView(button(if (story.draft) "继续制作" else "翻开相册") { open() }.apply { textSize = 13f; strokeWidth = 0; setPadding(dp(2),0,dp(2),0) }, LinearLayout.LayoutParams(0,-2,1f))
+        actions.addView(button("•••") { actions(story) }.apply { contentDescription = "管理故事：${story.title}"; strokeWidth = 0; minWidth = 0; minimumWidth = 0; setPadding(0,0,0,0) }, LinearLayout.LayoutParams(dp(48),dp(48)))
+        copy.addFull(actions); addFull(copy)
     }
-    private fun storyCard(story: Story): View = column().apply {
-        val open = { startActivity(Intent(this@StoriesActivity, if (story.draft) StoryEditorActivity::class.java else StoryDetailActivity::class.java).putExtra("story_id", story.id)) }
-        val frame = FrameLayout(this@StoriesActivity).apply {
-            background = shape(cardColor, 22); clipToOutline = true
-            isFocusable = true; contentDescription = "打开故事：${story.title}"
-            setOnClickListener { open() }
-        }
-        val picture = StoryCoverView(this@StoriesActivity).apply { position(story); contentDescription = null }
-        story.cover()?.let { Glide.with(this@StoriesActivity).load(Uri.parse(it.uri)).dontTransform().error(android.R.drawable.ic_menu_report_image).into(picture) }
-            ?: picture.setImageResource(R.drawable.memory_still_life)
-        frame.addView(picture, FrameLayout.LayoutParams(-1, -1))
-        frame.addView(View(this@StoriesActivity).apply {
-            background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.TRANSPARENT, Color.argb(30, 0, 0, 0), Color.argb(230, 0, 0, 0)))
-        }, FrameLayout.LayoutParams(-1, -1))
-        val copy = column().apply {
-            setPadding(dp(22), dp(20), dp(22), dp(22))
-            addFull(label(story.dateLabel(), 13f, Color.WHITE))
-            space(7)
-            addFull(editorial(story.title, 27f, Color.WHITE).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })
-            if (story.description.isNotBlank()) { space(7); addFull(label(story.description, 14f, Color.WHITE).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }) }
-        }
-        frame.addView(copy, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
-        addFull(frame, if (resources.configuration.fontScale > 1.2f) 360 else 290)
-        val meta = row().apply { setPadding(dp(3), dp(8), dp(3), 0) }
-        meta.addView(label("${story.moments.count { !it.video }} 张照片 · ${story.moments.count { it.video }} 段视频", 13f, muted), LinearLayout.LayoutParams(0, -2, 1f))
-        meta.addView(button(if (story.draft) "继续制作" else "播放故事") {
-            if (story.draft) open() else startActivity(Intent(this@StoriesActivity, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
-        }.apply { strokeWidth = 0; setTextColor(accentText) })
-        addFull(meta)
-        if (!story.draft) addFull(button("分享给亲友") {
-            startActivity(Intent(this@StoriesActivity, StoryShareActivity::class.java).putExtra("story_id", story.id))
-        }.apply { contentDescription = "分享故事：${story.title}"; setTextColor(accentText) })
+    private fun actions(story: Story) {
+        MemoryChrome.sheet(this,story.title,actions=listOf(
+            MemoryChrome.Action(if(story.favorite) "取消收藏" else "收藏故事") { story.favorite = !story.favorite; if(safely { store.save(story) }) render() },
+            MemoryChrome.Action(if(story.pinned) "取消置顶" else "置顶故事") { story.pinned = !story.pinned; if(safely { store.save(story) }) render() },
+            MemoryChrome.Action("分享方式") { startActivity(Intent(this,StorySharingActivity::class.java).putExtra("story_id",story.id)) }
+        ))
     }
 }

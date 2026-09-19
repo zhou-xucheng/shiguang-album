@@ -14,10 +14,17 @@ class StoryEditorActivity : StoryActivity() {
     private lateinit var story: Story
     private lateinit var titleInput: EditText
     private lateinit var descriptionInput: EditText
+    private var step = 0
+    private var textFieldsActive = false
     private var closing = false
     private var importing = false
+    private var mediaGrid: StoryTiles? = null
+    private var mediaScrollState: android.os.Parcelable? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        step = savedInstanceState?.getInt("step") ?: 0
+        mediaScrollState = savedInstanceState?.getParcelable("media_scroll")
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) { override fun handleOnBackPressed() { leavePage() } })
         if (!safely {
             story = store.get(savedInstanceState?.getString("story_id") ?: intent.getStringExtra("story_id") ?: "") ?: Story(draft = true)
             render()
@@ -31,88 +38,109 @@ class StoryEditorActivity : StoryActivity() {
         super.onResume()
         if (::story.isInitialized && !importing) { store.get(story.id)?.let { story = it }; render() }
     }
-    override fun onSaveInstanceState(outState: Bundle) { outState.putString("story_id", story.id); super.onSaveInstanceState(outState) }
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (::story.isInitialized) outState.putString("story_id", story.id)
+        outState.putInt("step", step)
+        outState.putParcelable("media_scroll", mediaGrid?.layoutManager?.onSaveInstanceState() ?: mediaScrollState)
+        super.onSaveInstanceState(outState)
+    }
     private fun field(hintText: String, value: String, multiline: Boolean = false) = EditText(this).apply {
         hint = hintText; setText(value); setTextColor(ink); setHintTextColor(muted); textSize = 17f
         setPadding(0, dp(10), 0, dp(10))
         inputType = InputType.TYPE_CLASS_TEXT or if (multiline) InputType.TYPE_TEXT_FLAG_MULTI_LINE else InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
         if (multiline) minLines = 2 else setSingleLine(true)
-        background = shape(android.graphics.Color.TRANSPARENT, 0)
+        background = shape(cardColor, 12)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
     }
     private fun captureText() {
-        if (::titleInput.isInitialized) { story.title = titleInput.text.toString().trim().ifBlank { "我的故事" }; story.description = descriptionInput.text.toString().trim() }
+        if (textFieldsActive && ::titleInput.isInitialized) { story.title = titleInput.text.toString().trim().ifBlank { "我的故事" }; story.description = descriptionInput.text.toString().trim() }
     }
     private fun save(): Boolean {
         captureText()
         return safely { store.save(story) }
     }
-    override fun onPause() { if (::story.isInitialized && !closing && !importing) save(); super.onPause() }
-    override fun leavePage() { if (save()) { closing = true; finish() } }
+    override fun onPause() {
+        mediaScrollState = mediaGrid?.layoutManager?.onSaveInstanceState() ?: mediaScrollState
+        if (::story.isInitialized && !closing && !importing) save()
+        super.onPause()
+    }
+    override fun leavePage() { if (save()) { if (step == 1) { step = 0; render() } else { closing = true; finish() } } }
     private fun render() {
+        mediaScrollState = mediaGrid?.layoutManager?.onSaveInstanceState() ?: mediaScrollState
+        mediaGrid = null
+        textFieldsActive = false
+        if (step == 0) { renderMedia(); return }
+        val dock = row()
+        dock.addView(button("上一步") { if (save()) { step = 0; render() } }, LinearLayout.LayoutParams(0, -2, 1f))
+        dock.addView(button("预览") { if (save()) startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        dock.addView(button("完成", true) {
+            if (story.moments.isEmpty()) { message("请先添加照片或视频"); return@button }
+            val draft = story.draft; story.draft = false
+            if (save()) {
+                closing = true
+                startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)); finish()
+            } else story.draft = draft
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        val content = page("封面与文字", "", footer = dock)
+        content.addFull(eyebrow("第 2 步 / 共 2 步 · 自动保存")); content.space(12)
+        content.addFull(editorial("为这段回忆起个名字", 27f)); content.space(20)
+        val cover = StoryCoverView(this).apply { position(story); background = shape(cardColor, 20); clipToOutline = true; contentDescription = "更换故事封面"
+            setOnClickListener { if (save()) startActivity(Intent(this@StoryEditorActivity, StoryArrangeActivity::class.java).putExtra("story_id", story.id).putExtra("choose_cover", true)) }
+        }
+        story.cover()?.let { Glide.with(this).load(Uri.parse(it.uri)).into(cover) }
+        content.addFull(cover, 180)
+        content.addFull(button("更换封面与调整位置") { cover.performClick() }); content.space(18)
+        content.addFull(label("相册名称", 15f, bold = true)); content.space(8)
+        titleInput = field("例如：周末去公园", story.title.takeUnless { it in listOf("新的故事", "我的故事") } ?: "").apply { contentDescription = "相册名称" }
+        content.addFull(titleInput); content.space(16)
+        content.addFull(label("写几句话 · 可不填", 15f, bold = true)); content.space(8)
+        descriptionInput = field("那天和谁在一起，有什么想记住的？", story.description, true).apply { contentDescription = "故事文字" }
+        content.addFull(descriptionInput); textFieldsActive = true; content.space(12)
+        story.suggestedTitle()?.let { suggestion -> content.addFull(button("用日期命名") {
+            if (titleInput.text.isNotBlank()) MemoryDialogBuilder(this).setTitle("替换当前名称？").setMessage(suggestion).setNegativeButton("保留", null).setPositiveButton("替换") { _, _ -> titleInput.setText(suggestion); save() }.show()
+            else { titleInput.setText(suggestion); save() }
+        }.apply { strokeWidth = 0; textSize = 13f }) }
+        content.addFull(settingRow("故事日期 · 可不填", story.dateLabel()) { captureText(); chooseDate(story.date) { story.date = it; story.dateConfirmed = true; story.dateManual = true; if (save()) render() } })
+        if (story.date.isNotBlank()) content.addFull(button("不显示故事日期") { story.date = ""; story.dateConfirmed = false; story.dateManual = true; if (save()) render() }.apply { strokeWidth = 0 })
+        content.space(12)
+        content.addFull(settingRow("自动播放选项", "每张 ${story.intervalSeconds} 秒 · ${if (story.originalSound) "保留视频原声" else "关闭视频原声"}") { captureText(); playbackOptions() })
+        content.space(14)
+        content.addFull(label("照片已保存为独立副本，原图不变。卸载应用会清除本地故事。", 13f, muted))
+        content.addFull(button(if (story.draft) "删除草稿" else "删除故事") {
+            MemoryDialogBuilder(this).setTitle("移入回收站？").setMessage("不删除手机原图，可在设置的回收站恢复。")
+                .setNegativeButton("取消", null).setPositiveButton("移入回收站") { _, _ -> story.deletedAt = System.currentTimeMillis(); if (save()) { closing = true; finish() } }.show()
+        }.apply { strokeWidth = 0; setTextColor(muted) })
+    }
+    private fun renderMedia() {
+        story.ensureOriginalOrder()
         val dock = row()
         dock.addView(button("＋ 添加") { if (save()) pickMedia() }, LinearLayout.LayoutParams(0, -2, 1f))
-        dock.addView(button("预览") { preview() }, LinearLayout.LayoutParams(0, -2, 1f))
-        dock.addView(button("完成", true) {
-            if (story.moments.isEmpty()) message("请先添加照片或视频") else {
-                val wasDraft = story.draft; story.draft = false
-                if (save()) {
-                    closing = true
-                    startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-                    finish()
-                } else story.draft = wasDraft
+        dock.addView(button("下一步", true) { if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) { step = 1; render() } }, LinearLayout.LayoutParams(0, -2, 1.4f))
+        val body = fixedPage(if (story.draft) "制作故事" else "编辑故事", dock)
+        val heading = column().apply { setPadding(dp(24), dp(8), dp(24), dp(12)) }
+        heading.addFull(eyebrow("第 1 步 / 共 2 步 · ${story.moments.size} 个片段")); heading.space(8)
+        heading.addFull(editorial("把喜欢的瞬间排在一起", 25f)); heading.space(6)
+        heading.addFull(label("轻点查看 · 长按拖动 · 随时继续添加", 13f, muted))
+        val tools = row()
+        tools.addView(button("排列顺序") { confirmDateSort(story) { if (save()) render() } }, LinearLayout.LayoutParams(0, -2, 1f))
+        tools.addView(button("批量整理") { if (save()) startActivity(Intent(this, StoryArrangeActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addFull(tools); body.addFull(heading)
+        if (story.moments.isEmpty()) { body.addFull(label("还没有照片，点下方「添加」开始。", 16f, muted).apply { setPadding(dp(24), dp(32), dp(24), 0) }); return }
+        val grid = StoryTiles(this, story.moments, details = false) { index -> if (save()) openMoment(this, story, index) }
+        val helper = androidx.recyclerview.widget.ItemTouchHelper(object : androidx.recyclerview.widget.ItemTouchHelper.SimpleCallback(15, 0) {
+            override fun isLongPressDragEnabled() = false
+            override fun onMove(rv: androidx.recyclerview.widget.RecyclerView, source: androidx.recyclerview.widget.RecyclerView.ViewHolder, target: androidx.recyclerview.widget.RecyclerView.ViewHolder): Boolean {
+                val from = source.bindingAdapterPosition; val to = target.bindingAdapterPosition
+                if (from < 0 || to < 0) return false
+                story.moveMoment(from, to); rv.adapter?.notifyItemMoved(from, to); return true
             }
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        val content = page(if (story.draft) "制作故事" else "编辑故事", "", footer = dock)
-        content.addFull(row().apply { addView(badge(if (story.draft) "草稿 · 自动保存" else "修改自动保存")) }); content.space(12)
-        content.addFull(eyebrow("01  照片与视频 · ${story.moments.size} 个片段")); content.space(12)
-        val media = panel()
-        if (story.moments.isEmpty()) { media.addFull(label("先选几张喜欢的照片", 20f, bold = true)); media.space(8); media.addFull(label("日期会自动读取；没有拍摄时间的文件可以稍后补充。", 15f, muted)); media.space(16); media.addFull(button("选择照片与视频", true) { pickMedia() }) }
-        else {
-            val strip = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-            val thumbs = row()
-            story.moments.take(8).forEachIndexed { index, moment ->
-                val image = ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP; background = shape(cardColor, 10); clipToOutline = true
-                    contentDescription = "查看第 ${index + 1} 个片段"; setOnClickListener { captureText(); if (save()) openMoment(this@StoryEditorActivity, story, index) }
-                }
-                Glide.with(this).load(Uri.parse(moment.uri)).into(image); thumbs.addView(image, LinearLayout.LayoutParams(dp(100), dp(120)))
-            }
-            strip.addView(thumbs); media.addFull(strip); media.space(10)
-            media.addFull(settingRow("整理片段", "拖动排序、批量移除、修改日期与文字") { if (save()) startActivity(Intent(this, StoryArrangeActivity::class.java).putExtra("story_id", story.id)) })
-            media.rule(); media.addFull(settingRow("按拍摄日期整理", "先预览日期分组，再决定是否排序") { suggestOrganization() })
-            media.rule(); media.addFull(settingRow("故事封面", "当前使用第 ${story.moments.indexOf(story.cover()) + 1} 张 · ${if (story.coverFit) "完整显示" else "铺满封面"}") {
-                if (save()) startActivity(Intent(this, StoryArrangeActivity::class.java).putExtra("story_id", story.id).putExtra("choose_cover", true))
-            })
-        }
-        content.addFull(media); content.space(22)
-        content.addFull(eyebrow("02  标题与文字 · 可以稍后填写")); content.space(12)
-        val info = panel()
-        titleInput = field("给故事起个名字", story.title).apply { textSize = 21f }
-        descriptionInput = field("写几句话，记住那一天…", story.description, true)
-        info.addFull(titleInput); info.rule(); info.addFull(descriptionInput); info.rule()
-        story.suggestedTitle()?.takeIf { it != story.title }?.let { suggestion ->
-            info.addFull(settingRow("试试这个标题", suggestion) { titleInput.setText(suggestion); save() })
-            info.rule()
-        }
-        info.addFull(settingRow("故事发生日期", story.dateLabel()) { captureText(); chooseDate(story.date) { story.date = it; story.dateConfirmed = true; if (save()) render() } })
-        if (story.date.isNotBlank()) info.addFull(button("暂不确定日期") { story.date = ""; story.dateConfirmed = false; if (save()) render() })
-        content.addFull(info); content.space(22)
-        content.addFull(eyebrow("03  播放方式")); content.space(12)
-        val playback = panel()
-        playback.addFull(settingRow("播放选项", "每张 ${story.intervalSeconds} 秒 · ${if (story.originalSound) "保留视频原声" else "关闭视频原声"}") { playbackOptions() })
-        content.addFull(playback); content.space(18)
-        val external = story.moments.count { Uri.parse(it.uri).scheme == "content" }
-        content.addFull(label(if (story.moments.isEmpty()) "添加成功后，这里会显示保存状态。" else if (external > 0) "有 $external 个旧版片段仍引用手机原文件，可保存独立副本。" else "${story.moments.size} 个片段已保存到应用，手机原图不受影响。卸载应用会清除故事及其副本。", 14f, muted))
-        if (external > 0) content.addFull(button("保存旧片段的独立副本") {
-            captureText(); importing = true
-            backgroundWork("保存副本", { update ->
-                try { story.moments.forEachIndexed { index, m -> if (Uri.parse(m.uri).scheme == "content") { update("正在保存 ${index + 1} / ${story.moments.size}"); m.sourceUri = m.uri; m.uri = StoryMedia.copy(applicationContext, Uri.parse(m.uri)); store.save(story) } } } finally { importing = false }
-            }) { importing = false; render() }
+            override fun onSwiped(h: androidx.recyclerview.widget.RecyclerView.ViewHolder, direction: Int) {}
+            override fun clearView(rv: androidx.recyclerview.widget.RecyclerView, h: androidx.recyclerview.widget.RecyclerView.ViewHolder) { super.clearView(rv, h); save(); rv.adapter?.notifyDataSetChanged() }
         })
-        content.space(18); content.addFull(settingRow(if (story.draft) "删除草稿" else "删除这个故事", "移入回收站，不删除手机原图") {
-            MemoryDialogBuilder(this).setTitle("将${if (story.draft) "草稿" else "故事"}移入回收站？").setMessage("以后可在设置的回收站恢复。")
-                .setNegativeButton("取消", null).setPositiveButton("移入回收站") { _, _ -> story.deletedAt = System.currentTimeMillis(); if (save()) { closing = true; finish() } }.show()
-        })
+        helper.attachToRecyclerView(grid); grid.longPress = { helper.startDrag(it) }
+        body.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        mediaGrid = grid
+        grid.layoutManager?.onRestoreInstanceState(mediaScrollState)
     }
     private fun preview() {
         if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) startActivity(Intent(this, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
@@ -192,7 +220,6 @@ class StoryEditorActivity : StoryActivity() {
 }
 
 fun openMoment(activity: android.app.Activity, story: Story, index: Int) {
-    val moment = story.moments[index]
-    activity.startActivity(Intent(activity, if (moment.video) StoryPlayerActivity::class.java else StoryPhotoActivity::class.java)
+    activity.startActivity(Intent(activity, StoryPhotoActivity::class.java)
         .putExtra("story_id", story.id).putExtra("start_index", index).putExtra("single", true))
 }

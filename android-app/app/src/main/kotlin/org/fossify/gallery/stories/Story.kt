@@ -12,7 +12,9 @@ data class StoryMoment(
     var date: String = "",
     var caption: String = "",
     var sourceUri: String? = "",
-    var dateVerified: Boolean = false
+    var dateVerified: Boolean = false,
+    var dateSource: String = "",
+    var addedOrder: Long = 0
 )
 
 @Keep
@@ -37,7 +39,10 @@ data class Story(
     var musicVolume: Int = 65,
     var coverX: Float = .5f,
     var coverY: Float = .5f,
-    var dateConfirmed: Boolean = false
+    var dateConfirmed: Boolean = false,
+    var dateManual: Boolean = false,
+    var favorite: Boolean = false,
+    var pinned: Boolean = false
 ) {
     fun moveMoment(from: Int, to: Int) {
         if (from !in moments.indices || to !in moments.indices || from == to) return
@@ -45,14 +50,30 @@ data class Story(
     }
 
     fun addMoments(items: List<StoryMoment>) {
+        ensureOriginalOrder()
         val known = moments.mapTo(mutableSetOf()) { it.sourceUri.orEmpty().ifBlank { it.uri } }
-        moments.addAll(items.filter { known.add(it.sourceUri.orEmpty().ifBlank { it.uri }) })
+        var order = moments.maxOfOrNull { it.addedOrder } ?: 0L
+        moments.addAll(items.filter { known.add(it.sourceUri.orEmpty().ifBlank { it.uri }) }.onEach { it.addedOrder = ++order })
     }
 
-    fun sortChronologically() = moments.sortBy { if (it.dateVerified) it.date.ifBlank { "9999-12-31" } else "9999-12-31" }
+    fun ensureOriginalOrder() { if (moments.any { it.addedOrder == 0L }) moments.forEachIndexed { i, m -> m.addedOrder = i + 1L } }
+    fun sortChronologically(descending: Boolean = false) {
+        ensureOriginalOrder()
+        moments.sortWith(compareBy<StoryMoment> { !StoryDates.usable(it) }.thenComparator { a, b ->
+            if (!StoryDates.usable(a) || !StoryDates.usable(b)) 0 else if (descending) b.date.compareTo(a.date) else a.date.compareTo(b.date)
+        })
+    }
+    fun restoreOriginalOrder() { ensureOriginalOrder(); moments.sortBy { it.addedOrder } }
+    fun moveSelected(ids: Set<String>, toStart: Boolean) {
+        ensureOriginalOrder()
+        val chosen = moments.filter { it.id in ids }; moments.removeAll { it.id in ids }
+        moments.addAll(if (toStart) 0 else moments.size, chosen)
+    }
+    fun year(): String = if (date.isNotBlank() && (dateManual || StoryDates.credible(date))) date.take(4) else "未注明"
 
     fun dateLabel() = when {
         date.isBlank() -> "日期待补充"
+        !dateManual && !StoryDates.credible(date) -> "日期待核对"
         !dateConfirmed -> date.replace('-', '.') + " · 待核对"
         else -> date.replace('-', '.')
     }
@@ -64,11 +85,11 @@ data class Story(
 
     fun cover() = moments.find { it.id == coverId } ?: moments.firstOrNull()
 
-    fun dateGroups() = moments.groupBy { it.date.takeIf { date -> date.isNotBlank() && it.dateVerified } ?: "" }.toSortedMap()
+    fun dateGroups() = moments.groupBy { it.date.takeIf { _ -> StoryDates.usable(it) } ?: "" }.toSortedMap()
 
     /** Suggest only from verified dates; never infer places or occasions from filenames. */
     fun suggestedTitle(): String? {
-        val dates = moments.filter { it.dateVerified }.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }.sorted()
+        val dates = moments.filter { StoryDates.usable(it) }.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }.sorted()
         if (dates.isEmpty()) return null
         val first = dates.first(); val last = dates.last()
         return when {
