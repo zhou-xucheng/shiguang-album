@@ -35,6 +35,13 @@ class App : FossifyApp() {
             if (config.thumbnailSpacing <= 1) config.thumbnailSpacing = (6 * resources.displayMetrics.density).toInt()
             preferences.edit().putBoolean("gallery_refinement_v3", true).apply()
         }
+        if (!preferences.getBoolean("compact_palette_v1", false)) {
+            // Update only the former default palette. Other themes and custom colors are retained.
+            if (config.backgroundColor == 0xFFF8F5EF.toInt() && config.primaryColor == 0xFF8A593F.toInt() && config.textColor == 0xFF342E29.toInt()) {
+                config.backgroundColor = 0xFFF7F8FA.toInt(); config.textColor = 0xFF252D34.toInt(); config.primaryColor = 0xFF355B77.toInt()
+            }
+            preferences.edit().putBoolean("compact_palette_v1", true).apply()
+        }
         Reprint.initialize(this)
         Picasso.setSingletonInstance(Picasso.Builder(this).downloader(object : Downloader {
             override fun load(request: Request) = Response.Builder().build()

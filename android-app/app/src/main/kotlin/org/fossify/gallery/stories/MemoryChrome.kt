@@ -58,13 +58,12 @@ object MemoryChrome {
                 val active = index == selected
                 val tint = if (active && ColorUtils.calculateContrast(accent, paper) >= 4.5) accent else ink
                 val tab = LinearLayout(a).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(a, 62)
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(a, 54)
                     contentDescription = entry.first; isSelected = active; isFocusable = true
                     setOnClickListener { navigate(a, entry.third) }
                     addView(ImageView(a).apply {
                         setImageResource(entry.second); imageTintList = ColorStateList.valueOf(if (active) tint else ColorUtils.blendARGB(ink, paper, .22f))
                         setPadding(dp(a, 17), dp(a, 4), dp(a, 17), dp(a, 4))
-                        if (active) background = rounded(a, ColorUtils.blendARGB(paper, accent, .11f), 14)
                     }, LinearLayout.LayoutParams(dp(a, 58), dp(a, 30)))
                     addView(text(a, entry.first, 12f).apply { gravity = Gravity.CENTER; setTextColor(tint); setPadding(0, dp(a, 4), 0, 0); if (active) typeface = Typeface.DEFAULT_BOLD })
                 }

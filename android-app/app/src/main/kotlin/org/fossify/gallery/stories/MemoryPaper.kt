@@ -9,7 +9,7 @@ import kotlin.random.Random
 
 object MemoryPaper {
     fun background(context: Context, color: Int): Drawable {
-        if (!context.getSharedPreferences("memory-design", Context.MODE_PRIVATE).getBoolean("paper", true)) return ColorDrawable(color)
+        if (!context.getSharedPreferences("memory-design", Context.MODE_PRIVATE).getBoolean("paper", false)) return ColorDrawable(color)
         val bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
         val random = Random(19)
         for (y in 0..63) for (x in 0..63) {

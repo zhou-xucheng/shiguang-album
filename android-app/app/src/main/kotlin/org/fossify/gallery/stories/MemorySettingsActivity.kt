@@ -43,6 +43,7 @@ class MemoryAppearanceActivity : StoryActivity() {
         val content = page("外观", "")
         content.addFull(sectionHeading("选一种舒服的颜色", "页面、菜单和弹窗会一起换上新颜色。"))
         listOf(
+            theme("清透", "浅灰白与静蓝", 0xFFF7F8FA.toInt(), 0xFF252D34.toInt(), 0xFF355B77.toInt()),
             theme("暖纸", "米白与暖棕", 0xFFF8F5EF.toInt(), 0xFF342E29.toInt(), 0xFF8A593F.toInt()),
             theme("青苔", "浅绿与森林绿", 0xFFF2F6F0.toInt(), 0xFF243B30.toInt(), 0xFF39654D.toInt()),
             theme("雾蓝", "浅灰蓝与海蓝", 0xFFF2F5F9.toInt(), 0xFF26374D.toInt(), 0xFF466687.toInt()),
@@ -61,7 +62,7 @@ class MemoryAppearanceActivity : StoryActivity() {
                     setOnCheckedChangeListener { _, checked -> design.edit().putBoolean(key,checked).apply(); render() }
                 })
             }
-            option("轻微纸张纹理", "paper", true)
+            option("轻微纸张纹理", "paper", false)
             option("减少浏览动效", "reduce_motion", false)
             addFull(label("纹理只用于页面背景，不改变照片。",13f,muted))
         }); content.space(16)

@@ -5,6 +5,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StoryTest {
+    @Test fun missingLegacyMomentMetadataUsesDefaultsDuringEditing() {
+        val story = Gson().fromJson("""{"moments":[{"id":"photo","uri":"content://photos/1"}]}""", Story::class.java)
+        val moment = story.moments.single()
+        assertEquals("", moment.date)
+        assertEquals("", moment.caption)
+        assertEquals("", moment.dateSource)
+        assertNull(story.suggestedTitle())
+        story.sortChronologically()
+        assertEquals(listOf(moment), story.dateGroups()[""])
+        assertEquals(story, Gson().fromJson(Gson().toJson(story), Story::class.java))
+    }
     @Test fun unknownStoryDatesRemainUnknownAndLegacyDatesNeedConfirmation() {
         assertEquals("", Story().date)
         assertEquals("日期待补充", Story().dateLabel())

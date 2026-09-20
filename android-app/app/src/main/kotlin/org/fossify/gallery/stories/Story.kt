@@ -15,7 +15,10 @@ data class StoryMoment(
     var dateVerified: Boolean = false,
     var dateSource: String = "",
     var addedOrder: Long = 0
-)
+) {
+    // Let Gson initialize Kotlin defaults when older metadata omits optional fields.
+    private constructor() : this(uri = "")
+}
 
 @Keep
 data class Story(

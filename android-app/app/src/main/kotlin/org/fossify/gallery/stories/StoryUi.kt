@@ -68,7 +68,7 @@ abstract class StoryActivity : SimpleActivity() {
     protected val accentText get() = if (ColorUtils.calculateContrast(accent, paper) >= 4.5) accent else ink
     protected fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    protected fun shape(color: Int, radius: Int = 24) = GradientDrawable().apply {
+    protected fun shape(color: Int, radius: Int = 12) = GradientDrawable().apply {
         setColor(color)
         cornerRadius = dp(radius).toFloat()
     }
@@ -82,8 +82,8 @@ abstract class StoryActivity : SimpleActivity() {
     }
 
     protected fun editorial(value: String, size: Float = 30f, color: Int = ink) = label(value, size, color).apply {
-        typeface = Typeface.create("serif", Typeface.NORMAL)
-        setLineSpacing(dp(5).toFloat(), 1.06f)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        setLineSpacing(dp(3).toFloat(), 1f)
     }
 
     protected fun eyebrow(value: String) = label(value, 13f, accentText, true).apply { letterSpacing = .04f }
@@ -94,13 +94,13 @@ abstract class StoryActivity : SimpleActivity() {
     }
 
     protected fun sectionHeading(title: String, subtitle: String = ""): LinearLayout = column().apply {
-        addFull(editorial(title, 29f))
+        addFull(editorial(title, 24f))
         if (subtitle.isNotBlank()) { space(8); addFull(label(subtitle, 14f, muted)) }
-        space(24)
+        space(18)
     }
 
     protected fun panel() = column().apply {
-        background = shape(surfaceColor, 20).apply { setStroke(dp(1), lineColor) }
+        background = shape(surfaceColor, 14).apply { setStroke(dp(1), lineColor) }
         setPadding(dp(18), dp(12), dp(18), dp(12))
     }
 
@@ -135,16 +135,60 @@ abstract class StoryActivity : SimpleActivity() {
         text = title
         textSize = 15f
         isAllCaps = false
-        cornerRadius = dp(16)
+        cornerRadius = dp(10)
         elevation = 0f
         insetTop = dp(4)
         insetBottom = dp(4)
         minHeight = dp(48)
-        setPadding(dp(16), dp(8), dp(16), dp(8))
+        setPadding(dp(12), dp(8), dp(12), dp(8))
         backgroundTintList = ColorStateList.valueOf(if (primary) accent else Color.TRANSPARENT)
         if (!primary) { strokeWidth = dp(1); strokeColor = ColorStateList.valueOf(lineColor) }
         setTextColor(if (primary) contrast(accent) else ink)
         setOnClickListener { action() }
+    }
+
+    protected fun quietButton(title: String, selected: Boolean = false, action: () -> Unit) = button(title, false, action).apply {
+        strokeWidth = 0
+        textSize = 14f
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        setTextColor(if (selected) accentText else muted)
+        backgroundTintList = ColorStateList.valueOf(if (selected) ColorUtils.blendARGB(paper, accent, .08f) else Color.TRANSPARENT)
+        isSelected = selected
+    }
+
+    protected fun jumpToMoment(count: Int, current: Int = 0, jump: (Int) -> Unit) {
+        if (count == 0) { message("还没有照片或视频"); return }
+        val input = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "输入 1—$count"; contentDescription = "片段序号"
+            setText((current + 1).coerceIn(1, count).toString()); selectAll()
+        }
+        val dialog = MemoryDialogBuilder(this).setTitle("跳到哪一张？").setMessage("照片与视频按当前排列共同计数")
+            .setView(input).setNegativeButton("取消", null).setPositiveButton("前往", null).create()
+        dialog.setOnShowListener { dialog.getButton(-1).setOnClickListener {
+            val value = input.text.toString().toIntOrNull()
+            if (value == null || value !in 1..count) input.error = "请输入 1—$count"
+            else { dialog.dismiss(); jump(value - 1) }
+        } }; dialog.show()
+    }
+
+    protected fun positionControl(count: Int, current: () -> Int, jump: (Int) -> Unit): LinearLayout = row().apply {
+        setPadding(dp(16), 0, dp(16), dp(4))
+        val slider = SeekBar(this@StoryActivity)
+        val position = quietButton("跳到第几张") { jumpToMoment(count, current()) { index -> slider.progress = index; jump(index) } }.apply { contentDescription = "跳到第几张" }
+        addView(position, LinearLayout.LayoutParams(-2, -2))
+        addView(slider.apply {
+            max = (count - 1).coerceAtLeast(0); progress = current().coerceAtLeast(0)
+            contentDescription = "快速定位照片"; minimumHeight = dp(48); isEnabled = count > 1
+            progressTintList = ColorStateList.valueOf(accent); thumbTintList = ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onStartTrackingTouch(bar: SeekBar) {}
+                override fun onStopTrackingTouch(bar: SeekBar) { jump(bar.progress) }
+                override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                    if (fromUser) { contentDescription = "定位第 ${value + 1} 个片段，共 $count 个"; position.text = "第 ${value + 1} 张" }
+                }
+            })
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
     }
 
     protected fun iconButton(icon: Int, description: String, action: () -> Unit) = ImageButton(this).apply {
@@ -184,8 +228,10 @@ abstract class StoryActivity : SimpleActivity() {
     protected fun overview(story: Story, selected: Int = 0, pick: (Int) -> Unit) {
         val dialog = MemoryDialogBuilder(this).setTitle("全部照片 · ${story.moments.size}").setNegativeButton("关闭", null).create()
         val grid = StoryTiles(this, story.moments, { it.id == story.moments.getOrNull(selected)?.id }) { index -> dialog.dismiss(); pick(index) }
-        dialog.setView(grid); dialog.show()
-        grid.layoutParams = grid.layoutParams.apply { height = (resources.displayMetrics.heightPixels * .62f).toInt() }
+        val box = column()
+        box.addFull(positionControl(story.moments.size, { (grid.layoutManager as androidx.recyclerview.widget.GridLayoutManager).findFirstVisibleItemPosition().coerceAtLeast(0) }) { grid.jumpTo(it) })
+        box.addView(grid, LinearLayout.LayoutParams(-1, (resources.displayMetrics.heightPixels * .52f).toInt()))
+        dialog.setView(box); dialog.show()
         grid.scrollToPosition(selected)
     }
 
@@ -207,13 +253,13 @@ abstract class StoryActivity : SimpleActivity() {
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
-        val header = row().apply { setPadding(dp(20), dp(10), dp(20), dp(10)) }
+        val header = row().apply { setPadding(dp(12), dp(4), dp(16), dp(4)) }
         if (back) header.addView(iconButton(R.drawable.ic_memory_back, "返回") { leavePage() }, LinearLayout.LayoutParams(dp(44), dp(44)))
         header.addView(label(title, if (back) 18f else 22f, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
         headerAction?.let { header.addView(it, LinearLayout.LayoutParams(dp(44), dp(44))) }
         root.addFull(header)
         val scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false; isVerticalScrollBarEnabled = false }
-        val content = column().apply { setPadding(dp(24), dp(12), dp(24), dp(28)) }
+        val content = column().apply { setPadding(dp(20), dp(8), dp(20), dp(24)) }
         if (subtitle.isNotBlank()) { content.addFull(label(subtitle, 14f, muted)); content.space(20) }
         scroll.addView(content)
         pageScroll = scroll
@@ -222,7 +268,7 @@ abstract class StoryActivity : SimpleActivity() {
         pageFooter = null
         if (footer?.tag == "memory-navigation") { root.addFull(footer); pageFooter = footer }
         else if (footer != null) {
-            val dock = column().apply { setBackgroundColor(surfaceColor); setPadding(dp(20), dp(8), dp(20), dp(10)) }
+            val dock = column().apply { setBackgroundColor(surfaceColor); setPadding(dp(16), dp(4), dp(16), dp(6)) }
             dock.addFull(footer)
             root.addFull(dock)
             pageFooter = dock

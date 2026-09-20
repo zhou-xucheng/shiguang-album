@@ -82,13 +82,12 @@ class StoryEditorActivity : StoryActivity() {
             } else story.draft = draft
         }, LinearLayout.LayoutParams(0, -2, 1f))
         val content = page("封面与文字", "", footer = dock)
-        content.addFull(eyebrow("第 2 步 / 共 2 步 · 自动保存")); content.space(12)
-        content.addFull(editorial("为这段回忆起个名字", 27f)); content.space(20)
+        content.addFull(eyebrow("第 2 步 / 共 2 步 · 封面与文字")); content.space(12)
         val cover = StoryCoverView(this).apply { position(story); background = shape(cardColor, 20); clipToOutline = true; contentDescription = "更换故事封面"
             setOnClickListener { if (save()) startActivity(Intent(this@StoryEditorActivity, StoryArrangeActivity::class.java).putExtra("story_id", story.id).putExtra("choose_cover", true)) }
         }
         story.cover()?.let { Glide.with(this).load(Uri.parse(it.uri)).into(cover) }
-        content.addFull(cover, 180)
+        content.addFull(cover, 132)
         content.addFull(button("更换封面与调整位置") { cover.performClick() }); content.space(18)
         content.addFull(label("相册名称", 15f, bold = true)); content.space(8)
         titleInput = field("例如：周末去公园", story.title.takeUnless { it in listOf("新的故事", "我的故事") } ?: "").apply { contentDescription = "相册名称" }
@@ -117,9 +116,8 @@ class StoryEditorActivity : StoryActivity() {
         dock.addView(button("＋ 添加") { if (save()) pickMedia() }, LinearLayout.LayoutParams(0, -2, 1f))
         dock.addView(button("下一步", true) { if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) { step = 1; render() } }, LinearLayout.LayoutParams(0, -2, 1.4f))
         val body = fixedPage(if (story.draft) "制作故事" else "编辑故事", dock)
-        val heading = column().apply { setPadding(dp(24), dp(8), dp(24), dp(12)) }
+        val heading = column().apply { setPadding(dp(20), dp(4), dp(20), dp(4)) }
         heading.addFull(eyebrow("第 1 步 / 共 2 步 · ${story.moments.size} 个片段")); heading.space(8)
-        heading.addFull(editorial("把喜欢的瞬间排在一起", 25f)); heading.space(6)
         heading.addFull(label("轻点查看 · 长按拖动 · 随时继续添加", 13f, muted))
         val tools = row()
         tools.addView(button("排列顺序") { confirmDateSort(story) { if (save()) render() } }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -141,6 +139,7 @@ class StoryEditorActivity : StoryActivity() {
         body.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
         mediaGrid = grid
         grid.layoutManager?.onRestoreInstanceState(mediaScrollState)
+        body.addFull(positionControl(story.moments.size, { (grid.layoutManager as androidx.recyclerview.widget.GridLayoutManager).findFirstVisibleItemPosition().coerceAtLeast(0) }) { grid.jumpTo(it) })
     }
     private fun preview() {
         if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) startActivity(Intent(this, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
