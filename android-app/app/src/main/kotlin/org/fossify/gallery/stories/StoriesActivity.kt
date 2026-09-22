@@ -107,7 +107,7 @@ class StoriesActivity : StoryActivity() {
         list?.adapter?.notifyDataSetChanged()
     }
     private fun card(story: Story, small: Boolean) = column().apply {
-        val open = { startActivity(Intent(this@StoriesActivity, if (story.draft) StoryEditorActivity::class.java else StoryDetailActivity::class.java).putExtra("story_id", story.id)) }
+        val open = { startActivity(Intent(this@StoriesActivity, if (story.draft) StoryEditorActivity::class.java else StoryPhotoActivity::class.java).putExtra("story_id", story.id)) }
         val frame = if (small) StorySquareFrame(this@StoriesActivity) else FrameLayout(this@StoriesActivity)
         frame.background = shape(cardColor, 9); frame.clipToOutline = true
         val cover = StoryCoverView(this@StoriesActivity).apply {
@@ -131,10 +131,9 @@ class StoriesActivity : StoryActivity() {
     }
     private fun actions(story: Story) {
         MemoryChrome.sheet(this,story.title,story.dateLabel(),actions=listOf(
-            MemoryChrome.Action(if (story.draft) "继续制作" else "打开故事") { startActivity(Intent(this, if(story.draft) StoryEditorActivity::class.java else StoryDetailActivity::class.java).putExtra("story_id",story.id)) },
+            MemoryChrome.Action(if (story.draft) "继续制作" else "打开故事") { startActivity(Intent(this, if(story.draft) StoryEditorActivity::class.java else StoryPhotoActivity::class.java).putExtra("story_id",story.id)) },
             MemoryChrome.Action(if(story.favorite) "取消收藏" else "收藏故事") { story.favorite = !story.favorite; if(safely { store.save(story) }) render() },
-            MemoryChrome.Action(if(story.pinned) "取消置顶" else "置顶故事") { story.pinned = !story.pinned; if(safely { store.save(story) }) render() },
-            MemoryChrome.Action("分享方式") { startActivity(Intent(this,StorySharingActivity::class.java).putExtra("story_id",story.id)) }
+            MemoryChrome.Action(if(story.pinned) "取消置顶" else "置顶故事") { story.pinned = !story.pinned; if(safely { store.save(story) }) render() }
         ))
     }
 }

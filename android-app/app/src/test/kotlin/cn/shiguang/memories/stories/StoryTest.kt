@@ -55,7 +55,7 @@ class StoryTest {
     }
     @Test fun legacyCoversStayCentered() {
         val story = Gson().fromJson("""{"id":"old","title":"old"}""", Story::class.java)
-        assertEquals(.5f, story.coverX); assertEquals(.5f, story.coverY)
+        assertEquals(.5f, story.coverX); assertEquals(.5f, story.coverY); assertEquals(1f, story.coverZoom)
     }
     @Test fun legacyMomentsCanBeReadAndDeduplicated() {
         val legacy = Gson().fromJson("""{"id":"old","title":"旧版故事","date":"2020-01-01","moments":[{"id":"m","uri":"content://old/1","date":"2020-01-01","caption":"往事"}]}""", Story::class.java)

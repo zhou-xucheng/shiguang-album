@@ -59,13 +59,10 @@
         <activity android:name=".stories.MemoryAppearanceActivity" android:exported="false" />
         <activity android:name=".stories.StoryMediaPickerActivity" android:exported="false" />
         <activity android:name=".stories.StoryArrangeActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name=".stories.StoryPhotoActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".stories.StoryPhotoActivity" android:exported="false" />
         <activity android:name=".stories.StoriesActivity" android:exported="false" />
         <activity android:name=".stories.StoryDetailActivity" android:exported="false" />
-        <activity android:name=".stories.StorySharingActivity" android:exported="false" />
-        <activity android:name=".stories.StoryShareActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".stories.StoryEditorActivity" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="false" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".stories.StoryPlayerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
             android:name=".activities.SplashActivity"
             android:exported="false"

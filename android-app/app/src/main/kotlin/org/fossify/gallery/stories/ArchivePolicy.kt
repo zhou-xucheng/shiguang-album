@@ -38,6 +38,7 @@ internal object ArchivePolicy {
             if (s.date.isNotBlank()) LocalDate.parse(s.date)
             require(s.intervalSeconds in 1..60 && s.musicVolume in 0..100)
             require(s.coverX.isFinite() && s.coverY.isFinite() && s.coverX in 0f..1f && s.coverY in 0f..1f)
+            require(s.coverZoom.isFinite() && s.coverZoom in 1f..4f)
             require(s.moments.map { it.id }.distinct().size == s.moments.size)
             s.moments.forEach { m ->
                 require(m.id.length in 1..100 && m.caption.length <= 100000 && m.uri.matches(Regex("media/[0-9]+"))) { "片段信息不符合备份要求" }

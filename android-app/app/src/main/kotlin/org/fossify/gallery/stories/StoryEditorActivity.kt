@@ -72,13 +72,13 @@ class StoryEditorActivity : StoryActivity() {
         if (step == 0) { renderMedia(); return }
         val dock = row()
         dock.addView(button("上一步") { if (save()) { step = 0; render() } }, LinearLayout.LayoutParams(0, -2, 1f))
-        dock.addView(button("预览") { if (save()) startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        dock.addView(button("预览") { if (save()) startActivity(Intent(this, StoryPhotoActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
         dock.addView(button("完成", true) {
             if (story.moments.isEmpty()) { message("请先添加照片或视频"); return@button }
             val draft = story.draft; story.draft = false
             if (save()) {
                 closing = true
-                startActivity(Intent(this, StoryDetailActivity::class.java).putExtra("story_id", story.id).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)); finish()
+                startActivity(Intent(this, StoryPhotoActivity::class.java).putExtra("story_id", story.id).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)); finish()
             } else story.draft = draft
         }, LinearLayout.LayoutParams(0, -2, 1f))
         val content = page("封面与文字", "", footer = dock)
@@ -120,8 +120,8 @@ class StoryEditorActivity : StoryActivity() {
         heading.addFull(eyebrow("第 1 步 / 共 2 步 · ${story.moments.size} 个片段")); heading.space(8)
         heading.addFull(label("轻点查看 · 长按拖动 · 随时继续添加", 13f, muted))
         val tools = row()
-        tools.addView(button("排列顺序") { confirmDateSort(story) { if (save()) render() } }, LinearLayout.LayoutParams(0, -2, 1f))
-        tools.addView(button("批量整理") { if (save()) startActivity(Intent(this, StoryArrangeActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1f))
+        tools.addView(button("排序") { confirmDateSort(story) { if (save()) render() } }, LinearLayout.LayoutParams(0, -2, .8f))
+        tools.addView(button("整理照片") { if (save()) startActivity(Intent(this, StoryArrangeActivity::class.java).putExtra("story_id", story.id)) }, LinearLayout.LayoutParams(0, -2, 1.2f))
         heading.addFull(tools); body.addFull(heading)
         if (story.moments.isEmpty()) { body.addFull(label("还没有照片，点下方「添加」开始。", 16f, muted).apply { setPadding(dp(24), dp(32), dp(24), 0) }); return }
         val grid = StoryTiles(this, story.moments, details = false) { index -> if (save()) openMoment(this, story, index) }
@@ -139,10 +139,9 @@ class StoryEditorActivity : StoryActivity() {
         body.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
         mediaGrid = grid
         grid.layoutManager?.onRestoreInstanceState(mediaScrollState)
-        body.addFull(positionControl(story.moments.size, { (grid.layoutManager as androidx.recyclerview.widget.GridLayoutManager).findFirstVisibleItemPosition().coerceAtLeast(0) }) { grid.jumpTo(it) })
     }
     private fun preview() {
-        if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) startActivity(Intent(this, StoryPlayerActivity::class.java).putExtra("story_id", story.id))
+        if (story.moments.isEmpty()) message("先添加照片或视频") else if (save()) startActivity(Intent(this, StoryPhotoActivity::class.java).putExtra("story_id", story.id))
     }
     private fun suggestOrganization() {
         captureText()
@@ -154,10 +153,12 @@ class StoryEditorActivity : StoryActivity() {
     }
     private fun playbackOptions() {
         val box = column().apply { setPadding(dp(24), dp(8), dp(24), dp(8)) }
-        val duration = button("照片停留 ${story.intervalSeconds} 秒") {}
-        duration.setOnClickListener {
-            val choices = intArrayOf(3, 5, 8, 12)
-            MemoryDialogBuilder(this).setTitle("每张照片停留多久").setSingleChoiceItems(choices.map { "$it 秒" }.toTypedArray(), choices.indexOf(story.intervalSeconds)) { dialog, index -> story.intervalSeconds = choices[index]; save(); duration.text = "照片停留 ${story.intervalSeconds} 秒"; dialog.dismiss() }.show()
+        val durationValue = label("${story.intervalSeconds} 秒", 14f, muted)
+        val duration = row().apply {
+            minimumHeight = dp(64); setPadding(0, dp(8), 0, dp(8)); isFocusable = true
+            addView(label("每张照片停留", 16f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
+            addView(durationValue); addView(label("  ›", 24f, muted))
+            setOnClickListener { chooseInterval { durationValue.text = "${story.intervalSeconds} 秒" } }
         }
         box.addFull(duration)
         fun toggle(title: String, value: Boolean, change: (Boolean) -> Unit) {
@@ -171,6 +172,31 @@ class StoryEditorActivity : StoryActivity() {
         toggle("柔和转场", story.transition) { story.transition = it }
         toggle("循环播放", story.loop) { story.loop = it }
         MemoryDialogBuilder(this).setTitle("播放选项").setView(ScrollView(this).apply { addView(box) }).setPositiveButton("完成") { _, _ -> render() }.show()
+    }
+    private fun chooseInterval(changed: () -> Unit) {
+        val presets = listOf(3, 5, 8, 12)
+        val actions = presets.map { seconds -> MemoryChrome.Action("$seconds 秒", if (story.intervalSeconds == seconds) "当前选择" else "") {
+            story.intervalSeconds = seconds; save(); changed()
+        } }.toMutableList()
+        actions += MemoryChrome.Action("自定义时间", "可设置 1—60 秒") {
+            val input = EditText(this).apply {
+                inputType = InputType.TYPE_CLASS_NUMBER
+                hint = "输入 1—60"
+                setText(story.intervalSeconds.toString())
+                selectAll()
+            }
+            val dialog = MemoryDialogBuilder(this).setTitle("自定义停留时间").setView(input)
+                .setNegativeButton("取消", null).setPositiveButton("保存", null).create()
+            dialog.setOnShowListener {
+                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val seconds = input.text.toString().toIntOrNull()
+                    if (seconds == null || seconds !in 1..60) input.error = "请输入 1—60 秒"
+                    else { story.intervalSeconds = seconds; save(); changed(); dialog.dismiss() }
+                }
+            }
+            dialog.show()
+        }
+        MemoryChrome.sheet(this, "照片停留时间", "自动播放时，每张照片停留多久。", actions)
     }
     private fun pickMedia() {
         captureText()

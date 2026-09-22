@@ -133,37 +133,51 @@ class StoryArrangeActivity : StoryActivity() {
     }
     private fun selectCover(moment: StoryMoment) {
         val draft = story.copy(coverId = moment.id)
-        if (story.cover()?.id != moment.id) { draft.coverX = .5f; draft.coverY = .5f }
+        if (story.cover()?.id != moment.id) { draft.coverX = .5f; draft.coverY = .5f; draft.coverZoom = 1f }
         val box = column().apply { setPadding(dp(24), dp(8), dp(24), dp(16)) }
-        val preview = StoryCoverView(this).apply { setBackgroundColor(cardColor); position(draft); contentDescription = "封面位置预览" }
-        preview.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-            val homeWidth = (resources.displayMetrics.widthPixels - dp(48)).coerceAtLeast(1)
-            val height = (dp(200) * v.width.toFloat() / homeWidth).toInt().coerceAtLeast(1)
-            if (v.layoutParams.height != height) v.layoutParams = v.layoutParams.apply { this.height = height }
+        val preview = StoryCoverView(this).apply {
+            setBackgroundColor(cardColor)
+            position(draft)
+            contentDescription = "封面裁剪预览，可单指拖动、双指缩放"
+            editCrop { x, y, zoom -> draft.coverX = x; draft.coverY = y; draft.coverZoom = zoom }
         }
         Glide.with(this).load(Uri.parse(moment.uri)).dontTransform().into(preview)
-        box.addFull(preview, 200); box.space(12)
-        box.addFull(label("移动滑块，把人物留在画面中。原照片不会改变。", 14f, muted))
-        val sliders = column()
-        fun slider(title: String, value: Float, change: (Float) -> Unit) {
-            sliders.addFull(label(title, 14f))
-            sliders.addFull(SeekBar(this).apply {
-                max = 100; progress = (value * 100).toInt(); contentDescription = title
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onStartTrackingTouch(s: SeekBar?) {}
-                    override fun onStopTrackingTouch(s: SeekBar?) {}
-                    override fun onProgressChanged(s: SeekBar?, value: Int, user: Boolean) { if (user) { change(value / 100f); preview.position(draft) } }
-                })
-            })
+        val previewFrame = FrameLayout(this).apply {
+            background = shape(cardColor, 14); clipToOutline = true
+            addView(preview, FrameLayout.LayoutParams(-1, -1))
+            addView(View(this@StoryArrangeActivity).apply {
+                isClickable = false
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.TRANSPARENT)
+                    setStroke(dp(2), android.graphics.Color.argb(170, 255, 255, 255))
+                    cornerRadius = dp(14).toFloat()
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
         }
-        val mode = button(if (draft.coverFit) "完整显示" else "铺满封面") {}
-        mode.setOnClickListener { draft.coverFit = !draft.coverFit; mode.text = if (draft.coverFit) "完整显示" else "铺满封面"; sliders.visibility = if (draft.coverFit) View.GONE else View.VISIBLE; preview.position(draft) }
-        box.addFull(mode)
-        slider("左右位置", draft.coverX) { draft.coverX = it }; slider("上下位置", draft.coverY) { draft.coverY = it }
-        sliders.visibility = if (draft.coverFit) View.GONE else View.VISIBLE; box.addFull(sliders)
+        box.addFull(previewFrame, 220); box.space(12)
+        val help = label(if (draft.coverFit) "当前完整显示照片" else "单指拖动画面 · 双指缩放，像裁剪截图一样调整", 14f, muted)
+        box.addFull(help); box.space(8)
+        val controls = row()
+        val mode = button(if (draft.coverFit) "改为铺满裁剪" else "改为完整显示") {}
+        mode.setOnClickListener {
+            draft.coverFit = !draft.coverFit
+            mode.text = if (draft.coverFit) "改为铺满裁剪" else "改为完整显示"
+            help.text = if (draft.coverFit) "当前完整显示照片" else "单指拖动画面 · 双指缩放，像裁剪截图一样调整"
+            preview.position(draft)
+        }
+        controls.addView(mode, LinearLayout.LayoutParams(0, -2, 1.4f))
+        controls.addView(button("复位") {
+            draft.coverFit = false; draft.coverX = .5f; draft.coverY = .5f; draft.coverZoom = 1f
+            mode.text = "改为完整显示"; help.text = "单指拖动画面 · 双指缩放，像裁剪截图一样调整"; preview.position(draft)
+        }, LinearLayout.LayoutParams(0, -2, .8f))
+        box.addFull(controls)
         val scroll = ScrollView(this).apply { addView(box) }
         MemoryDialogBuilder(this).setTitle("调整故事封面").setView(scroll).setNegativeButton("取消", null)
-            .setPositiveButton("保存封面") { _, _ -> story.coverId = draft.coverId; story.coverFit = draft.coverFit; story.coverX = draft.coverX; story.coverY = draft.coverY; if (safely { store.save(story) }) { message("封面已保存"); finish() } }.show()
+            .setPositiveButton("保存封面") { _, _ ->
+                story.coverId = draft.coverId; story.coverFit = draft.coverFit
+                story.coverX = draft.coverX; story.coverY = draft.coverY; story.coverZoom = draft.coverZoom
+                if (safely { store.save(story) }) finish()
+            }.show()
     }
     private fun editMoment(moment: StoryMoment) {
         val editor = column().apply { setPadding(dp(24), dp(8), dp(24), dp(8)) }

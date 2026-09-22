@@ -156,41 +156,6 @@ abstract class StoryActivity : SimpleActivity() {
         isSelected = selected
     }
 
-    protected fun jumpToMoment(count: Int, current: Int = 0, jump: (Int) -> Unit) {
-        if (count == 0) { message("还没有照片或视频"); return }
-        val input = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            hint = "输入 1—$count"; contentDescription = "片段序号"
-            setText((current + 1).coerceIn(1, count).toString()); selectAll()
-        }
-        val dialog = MemoryDialogBuilder(this).setTitle("跳到哪一张？").setMessage("照片与视频按当前排列共同计数")
-            .setView(input).setNegativeButton("取消", null).setPositiveButton("前往", null).create()
-        dialog.setOnShowListener { dialog.getButton(-1).setOnClickListener {
-            val value = input.text.toString().toIntOrNull()
-            if (value == null || value !in 1..count) input.error = "请输入 1—$count"
-            else { dialog.dismiss(); jump(value - 1) }
-        } }; dialog.show()
-    }
-
-    protected fun positionControl(count: Int, current: () -> Int, jump: (Int) -> Unit): LinearLayout = row().apply {
-        setPadding(dp(16), 0, dp(16), dp(4))
-        val slider = SeekBar(this@StoryActivity)
-        val position = quietButton("跳到第几张") { jumpToMoment(count, current()) { index -> slider.progress = index; jump(index) } }.apply { contentDescription = "跳到第几张" }
-        addView(position, LinearLayout.LayoutParams(-2, -2))
-        addView(slider.apply {
-            max = (count - 1).coerceAtLeast(0); progress = current().coerceAtLeast(0)
-            contentDescription = "快速定位照片"; minimumHeight = dp(48); isEnabled = count > 1
-            progressTintList = ColorStateList.valueOf(accent); thumbTintList = ColorStateList.valueOf(accent)
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onStartTrackingTouch(bar: SeekBar) {}
-                override fun onStopTrackingTouch(bar: SeekBar) { jump(bar.progress) }
-                override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
-                    if (fromUser) { contentDescription = "定位第 ${value + 1} 个片段，共 $count 个"; position.text = "第 ${value + 1} 张" }
-                }
-            })
-        }, LinearLayout.LayoutParams(0, dp(48), 1f))
-    }
-
     protected fun iconButton(icon: Int, description: String, action: () -> Unit) = ImageButton(this).apply {
         setImageResource(icon)
         imageTintList = ColorStateList.valueOf(ink)
@@ -201,23 +166,38 @@ abstract class StoryActivity : SimpleActivity() {
         setOnClickListener { action() }
     }
 
+    private var lastSortStory = ""
+    private var lastSortBefore: List<String> = emptyList()
+    private var lastSortAfter: List<String> = emptyList()
+
     protected fun confirmDateSort(story: Story, done: () -> Unit) {
         story.ensureOriginalOrder()
-        MemoryDialogBuilder(this).setTitle("照片顺序").setItems(arrayOf("选择时的顺序", "拍摄时间 · 从早到晚", "拍摄时间 · 从晚到早")) { _, which ->
+        fun apply(which: Int) {
             val before = story.moments.map { it.id }
             if (which == 0) story.restoreOriginalOrder() else story.sortChronologically(which == 2)
-            val after = story.moments.map { it.id }; done()
-            com.google.android.material.snackbar.Snackbar.make(window.decorView, if (which == 0) "已恢复选择顺序" else "已排序，未知日期放在最后", com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE)
-                .setAnchorView(pageFooter)
-                .setAction("撤销") {
-                    if (story.moments.map { it.id } == after) { story.moments.sortBy { before.indexOf(it.id) }; done() }
-                    else message("顺序已再次调整，保留当前结果")
-                }.show()
-        }.setNegativeButton("取消", null).show()
+            lastSortStory = story.id
+            lastSortBefore = before
+            lastSortAfter = story.moments.map { it.id }
+            done()
+        }
+        val actions = mutableListOf(
+            MemoryChrome.Action("保持添加时的顺序", "回到选入相册时的排列") { apply(0) },
+            MemoryChrome.Action("较早的照片在前", "按拍摄日期排列，未知日期放在最后") { apply(1) },
+            MemoryChrome.Action("较新的照片在前", "按拍摄日期排列，未知日期放在最后") { apply(2) }
+        )
+        if (lastSortStory == story.id && story.moments.map { it.id } == lastSortAfter) {
+            actions += MemoryChrome.Action("撤销上次排序", "恢复排序前的排列") {
+                val rank = lastSortBefore.withIndex().associate { it.value to it.index }
+                story.moments.sortBy { rank[it.id] ?: Int.MAX_VALUE }
+                lastSortStory = ""; lastSortBefore = emptyList(); lastSortAfter = emptyList()
+                done()
+            }
+        }
+        MemoryChrome.sheet(this, "照片排序", "选择一种排列方式。长按拖动仍可随时手动调整。", actions)
     }
 
-    protected fun fixedPage(title: String, footer: View? = null): LinearLayout {
-        val unused = page(title, "", footer = footer)
+    protected fun fixedPage(title: String, footer: View? = null, headerAction: View? = null): LinearLayout {
+        val unused = page(title, "", footer = footer, headerAction = headerAction)
         val scroll = pageScroll!!; val root = scroll.parent as LinearLayout
         root.removeView(scroll); pageScroll = null
         val body = column()
@@ -226,10 +206,9 @@ abstract class StoryActivity : SimpleActivity() {
     }
 
     protected fun overview(story: Story, selected: Int = 0, pick: (Int) -> Unit) {
-        val dialog = MemoryDialogBuilder(this).setTitle("全部照片 · ${story.moments.size}").setNegativeButton("关闭", null).create()
+        val dialog = MemoryDialogBuilder(this).setTitle("缩略图 · ${story.moments.size}").setNegativeButton("关闭", null).create()
         val grid = StoryTiles(this, story.moments, { it.id == story.moments.getOrNull(selected)?.id }) { index -> dialog.dismiss(); pick(index) }
         val box = column()
-        box.addFull(positionControl(story.moments.size, { (grid.layoutManager as androidx.recyclerview.widget.GridLayoutManager).findFirstVisibleItemPosition().coerceAtLeast(0) }) { grid.jumpTo(it) })
         box.addView(grid, LinearLayout.LayoutParams(-1, (resources.displayMetrics.heightPixels * .52f).toInt()))
         dialog.setView(box); dialog.show()
         grid.scrollToPosition(selected)

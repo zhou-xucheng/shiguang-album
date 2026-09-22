@@ -42,6 +42,7 @@ data class Story(
     var musicVolume: Int = 65,
     var coverX: Float = .5f,
     var coverY: Float = .5f,
+    var coverZoom: Float = 1f,
     var dateConfirmed: Boolean = false,
     var dateManual: Boolean = false,
     var favorite: Boolean = false,
